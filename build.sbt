@@ -11,7 +11,9 @@ lazy val dlm = (project in file("."))
   .settings(
     name := "dlm",
     libraryDependencies ++= Seq(spinalCore, spinalLib, spinalIdslPlugin),
-    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.9" % Test
+    libraryDependencies += "com.lihaoyi" %% "utest" % "0.7.10" % "test",
+    libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.8.0",
+    testFrameworks += new TestFramework("utest.runner.Framework")
   )
 
 fork := true

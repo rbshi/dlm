@@ -1,15 +1,15 @@
-package dlm
+package sample
 
 import spinal.core._
-import spinal.sim._
 import spinal.core.sim._
 
 import scala.util.Random
-import org.scalatest.funsuite.AnyFunSuite
 
-class MyTopLevelTest extends AnyFunSuite{
 
-  test("hello"){
+//MyTopLevel's testbench
+object MyTopLevelSim {
+  def main(args: Array[String]) {
+
     SimConfig.withWave.doSim(new MyTopLevel){dut =>
       //Fork a process to generate the reset and the clock on the dut
       dut.clockDomain.forkStimulus(period = 10)
@@ -27,13 +27,13 @@ class MyTopLevelTest extends AnyFunSuite{
         val modelFlag = modelState == 0 || dut.io.cond1.toBoolean
         assert(dut.io.state.toInt == modelState)
         assert(dut.io.flag.toBoolean == modelFlag)
+
         //Update the reference model value
         if(dut.io.cond0.toBoolean) {
           modelState = (modelState + 1) & 0xFF
         }
       }
-      println("Simulation accomplished.")
+      println(s"Simulation finished.")
     }
   }
 }
-

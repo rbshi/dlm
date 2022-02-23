@@ -7,15 +7,16 @@ object dlm extends SbtModule {
   override def millSourcePath = os.pwd
   def ivyDeps = Agg(
     ivy"com.github.spinalhdl::spinalhdl-core:$spinalVersion",
-    ivy"com.github.spinalhdl::spinalhdl-lib:$spinalVersion"
+    ivy"com.github.spinalhdl::spinalhdl-lib:$spinalVersion",
+    ivy"com.lihaoyi::os-lib:0.8.0"
   )
   def scalacPluginIvyDeps = Agg(ivy"com.github.spinalhdl::spinalhdl-idsl-plugin:$spinalVersion")
 
   object test extends Tests {
     def ivyDeps = Agg(
-      ivy"org.scalactic::scalactic:3.1.1",
-      ivy"org.scalatest::scalatest:3.1.1"
+      ivy"com.lihaoyi::utest:0.7.4",
     )
-    def testFrameworks = Seq("org.scalatest.tools.Framework")
+    def testFrameworks = Seq("utest.runner.Framework")
   }
+
 }

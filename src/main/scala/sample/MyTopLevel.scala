@@ -16,12 +16,9 @@
  * License along with this library.
  */
 
-package dlm
+package sample
 
 import spinal.core._
-import spinal.lib._
-
-import scala.util.Random
 
 //Hardware definition
 class MyTopLevel extends Component {

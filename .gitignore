@@ -18,6 +18,7 @@ project/plugins/project/
 .worksheet
 
 .idea
+.idea_modules
 out
 
 # Metals
