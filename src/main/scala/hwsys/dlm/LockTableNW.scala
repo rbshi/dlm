@@ -70,43 +70,56 @@ class LockTable(conf: SysConfig) extends Component {
       }
     }
 
+    // HT req -> resp is in sequential
     INSET_RESP.whenIsActive {
       ht.io.update_addr := ht.io.ht_res_if.find_addr
       when(ht.io.ht_res_if.fire) {
-        when(!req.lkRelease) {
 
-          ht.io.update_data := (ht_ram_entry_cast.key ## req.lkType ## (ht_ram_entry_cast.owner_cnt+1) ## ht_ram_entry_cast.next_ptr ## ht_ram_entry_cast.net_ptr_val).asUInt
+        switch(req.lkRelease){
+          is(False) {
+            ht.io.update_data := (ht_ram_entry_cast.key ## req.lkType ## (ht_ram_entry_cast.owner_cnt+1) ## ht_ram_entry_cast.next_ptr ## ht_ram_entry_cast.net_ptr_val).asUInt
 
-          when(ht.io.ht_res_if.rescode === HashTableRetCode.ins_exist) {
-            // lock exist
-            when((!req.lkUpgrade && (ht_lock_entry_cast.lock_status | req.lkType)) || (req.lkUpgrade && ht_lock_entry_cast.owner_cnt > 1)) {
-              r_lock_resp := LockRespType.abort // no wait
-              goto(LK_RESP)
+            switch(ht.io.ht_res_if.rescode) {
+              is(HashTableRetCode.ins_exist) {
+                // lock exist
+                when((!req.lkUpgrade && (ht_lock_entry_cast.lock_status | req.lkType)) || (req.lkUpgrade && ht_lock_entry_cast.owner_cnt > 1)) {
+                  r_lock_resp := LockRespType.abort // no wait
+                  goto(LK_RESP)
+                } otherwise {
+                  r_lock_resp := LockRespType.grant
+                  // write back to ht data ram
+                  ht.io.update_en := True
+                  goto(LK_RESP)
+                }
+              }
+              // no space
+              is(HashTableRetCode.ins_fail) {
+                r_lock_resp := LockRespType.abort // no wait
+                goto(LK_RESP)
+              }
+              // insert_success
+              default {
+                r_lock_resp := LockRespType.grant
+                goto(LK_RESP)
+              }
+            }
+          }
+
+          is(True){
+            ht.io.update_data := (ht_ram_entry_cast.key ## req.lkType ## (ht_ram_entry_cast.owner_cnt-1) ## ht_ram_entry_cast.next_ptr ## ht_ram_entry_cast.net_ptr_val).asUInt
+
+            // lock release, ht.io.ht_res_if.rescode must be ins_exist. 2 cases: cnt-- or del entry (cost a few cycles)
+            when(ht_ram_entry_cast.owner_cnt===1){
+              // ht must be ready, del the entry: BUG
+              goto(DEL_CMD)
             } otherwise {
-              r_lock_resp := LockRespType.grant
-              // write back to ht data ram
               ht.io.update_en := True
               goto(LK_RESP)
             }
-          } otherwise {
-            // insert_success
-            r_lock_resp := LockRespType.grant
-            goto(LK_RESP)
+            r_lock_resp := LockRespType.release
           }
-        } otherwise {
-
-          ht.io.update_data := (ht_ram_entry_cast.key ## req.lkType ## (ht_ram_entry_cast.owner_cnt-1) ## ht_ram_entry_cast.next_ptr ## ht_ram_entry_cast.net_ptr_val).asUInt
-
-          // lock release, ht.io.ht_res_if.rescode must be ins_exist. 2 cases: cnt-- or del entry (cost a few cycles)
-          when(ht_ram_entry_cast.owner_cnt===1){
-            // ht must be ready, del the entry: BUG
-            goto(DEL_CMD)
-          } otherwise {
-            ht.io.update_en := True
-            goto(LK_RESP)
-          }
-          r_lock_resp := LockRespType.release
         }
+
       }
     }
 

@@ -48,9 +48,9 @@ object OneNodeSim {
     implicit val sysConf = new SysConfig {
       override val nNode: Int = 1
       override val nCh: Int = 4
-      override val nLock: Int = 4096 * nCh
       override val nTxnMan: Int = 1
       override val nLtPart: Int = 1
+      override val nLock: Int = 4096 * nLtPart
     }
 
     SimConfig.withWave.compile {
@@ -69,12 +69,12 @@ object OneNodeSim {
       val axiMem = SimDriver.instAxiMemSim(dut.io.axi, dut.clockDomain, None)
 
       // cmd memory
-      val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)((_,_) => 0, (_,_) => 0, _ + _,  (_,_) => 1).toArray
+      val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)((_,_) => 0, (_,_) => 0, _ + _,  (_,_) => 0).toArray
       val cmdAxiMem = SimDriver.instAxiMemSim(dut.io.cmdAxi, dut.clockDomain, Some(txnCtx))
 
       dut.io.start #= false
       // wait the fifo (empty_ptr) to reset
-      dut.clockDomain.waitSampling(2000)
+      dut.clockDomain.waitSampling(sysConf.nLock/sysConf.nLtPart+1000)
 
       // config
       dut.io.cmdAddrOffs #= 0

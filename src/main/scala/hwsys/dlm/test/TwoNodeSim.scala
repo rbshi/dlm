@@ -71,9 +71,9 @@ object TwoNodeSim {
     implicit val sysConf = new SysConfig {
       override val nNode: Int = 2
       override val nCh: Int = 4
-      override val nLock: Int = 4096*8
       override val nTxnMan: Int = 1
       override val nLtPart: Int = 1
+      override val nLock: Int = 4096 * nLtPart
     }
 
     SimConfig.withWave.compile {
@@ -98,7 +98,7 @@ object TwoNodeSim {
 
       dut.n0.io.start #= false
       // wait the fifo (empty_ptr) to reset
-      dut.clockDomain.waitSampling(2000)
+      dut.clockDomain.waitSampling(sysConf.nLock/sysConf.nLtPart+1000)
 
       // config
       dut.n0.io.cmdAddrOffs #= 0
