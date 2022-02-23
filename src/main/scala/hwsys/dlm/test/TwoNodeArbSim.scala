@@ -8,10 +8,11 @@ import hwsys.dlm._
 import hwsys.sim._
 import hwsys.util.Helpers._
 
-class TwoNodeDirectTop(sysConf: SysConfig) extends Component {
 
+class TwoNodeArbTop(sysConf: SysConfig) extends Component {
+
+  // node0: with txnMan only
   val n0 = new Area {
-
     val io = new Bundle {
       val axi = master(Axi4(sysConf.axiConf))
       val cmdAxi = master(Axi4(sysConf.axiConf))
@@ -36,15 +37,13 @@ class TwoNodeDirectTop(sysConf: SysConfig) extends Component {
     ltMCh.io.nodeId := 0
 
     Seq(ltMCh.io.lt(1).lkReq, ltMCh.io.lt(1).lkResp).foreach(_.tieOff(true))
-
   }
 
+  // node1: with txnAgent only
   val n1 = new Area {
-
     val io = new Bundle {
       val axi = master(Axi4(sysConf.axiConf))
     }
-
     val txnAgt = new TxnAgent(sysConf)
     val ltMCh = new LtTop(sysConf)
 
@@ -54,18 +53,34 @@ class TwoNodeDirectTop(sysConf: SysConfig) extends Component {
     ltMCh.io.nodeId := 1
 
     Seq(ltMCh.io.lt(0).lkReq, ltMCh.io.lt(0).lkResp).foreach(_.tieOff(true))
-
   }
 
-  // directly connect the txnMan <> txnAgent
-  n0.txnMan.io.lkReqRmt <> n1.txnAgt.io.lkReq
-  n0.txnMan.io.lkRespRmt <> n1.txnAgt.io.lkResp
-  n0.txnMan.io.wrRmt <> n1.txnAgt.io.wrData
-  n0.txnMan.io.rdRmt <> n1.txnAgt.io.rdData
+  // NetArbs
+  val sendArb = new SendArbiter(1, sysConf)
+  val reqDisp = new ReqDispatcher(1, sysConf)
+  val respArb = new RespArbiter(1, sysConf)
+  val recvDisp = new RecvDispatcher(1, sysConf)
+
+  // connect
+  n0.txnMan.io.lkReqRmt >> sendArb.io.lkReqV(0)
+  n0.txnMan.io.wrRmt >> sendArb.io.wrDataV(0)
+
+  reqDisp.io.lkReq >> n1.txnAgt.io.lkReq
+  reqDisp.io.wrData >> n1.txnAgt.io.wrData
+
+  n1.txnAgt.io.lkResp >> respArb.io.lkResp
+  n1.txnAgt.io.rdData >> respArb.io.rdData
+
+  recvDisp.io.lkRespV(0) >> n0.txnMan.io.lkRespRmt
+  recvDisp.io.rdDataV(0) >> n0.txnMan.io.rdRmt
+
+  // TODO: add some latency here
+  sendArb.io.sendQ >> reqDisp.io.reqQ
+  respArb.io.respQ >> recvDisp.io.recvQ
 }
 
 
-object TwoNodeSim {
+object TwoNodeArbSim {
   def main(args: Array[String]): Unit = {
 
     implicit val sysConf = new SysConfig {
@@ -77,10 +92,10 @@ object TwoNodeSim {
     }
 
     SimConfig.withWave.compile {
-      val dut = new TwoNodeDirectTop(sysConf)
+      val dut = new TwoNodeArbTop(sysConf)
       dut.n0.txnMan.io.simPublic()
       dut
-    }.doSim("twonode_direct_conn", 99) { dut =>
+    }.doSim("twonode_with_netarb", 99) { dut =>
       // params
       val txnLen = 32
       val txnCnt = 128
@@ -113,8 +128,6 @@ object TwoNodeSim {
       dut.n0.io.start #= true
       dut.clockDomain.waitSampling()
       dut.n0.io.start #= false
-
-      // dut.clockDomain.waitSampling(64000)
 
       dut.clockDomain.waitSamplingWhere(dut.n0.txnMan.io.done.toBoolean)
 
