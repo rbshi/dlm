@@ -34,11 +34,12 @@ trait SysConfig {
 
   val wOwnerCnt = 8
   def wHtValNW = 1 + wOwnerCnt
-  val wHtBucket = 6
+  val wHtBucket = 8
   def wHtTable = log2Up(nLock)
   def wLtPart = log2Up(nLtPart)
 
-  val wChSize = 28 // 256MB of each channel (used as offset with global addressing)
+  // FIXME: for sim
+  val wChSize = 6 // 256MB of each channel (used as offset with global addressing)
 
   val wLkAttr = 2
   val wTupLenPow = 3 //len(tuple)=2^wLen; maxLen = 64B << 7 = 8192 B

@@ -70,7 +70,7 @@ object TwoNodeSim {
 
     implicit val sysConf = new SysConfig {
       override val nNode: Int = 2
-      override val nCh: Int = 4
+      override val nCh: Int = 2
       override val nTxnMan: Int = 1
       override val nLtPart: Int = 1
       override val nLock: Int = 4096 * nLtPart
@@ -89,7 +89,12 @@ object TwoNodeSim {
       dut.clockDomain.forkStimulus(period = 10)
 
       // cmd memory
-      val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)((_,_) => 0, (_,_) => 0, _ + _,  (_,_) => 0).toArray
+      val fNId = (i: Int, j: Int) => j%sysConf.nNode
+      val fCId = (i: Int, j: Int) => j%sysConf.nCh
+      val fTId = (i: Int, j: Int) => i*txnLen/4 + j
+      val fLkAttr = (i: Int, j: Int) => 1
+
+      val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)(fNId, fCId, fTId, fLkAttr).toArray
       val cmdAxiMem = SimDriver.instAxiMemSim(dut.n0.io.cmdAxi, dut.clockDomain, Some(txnCtx))
 
       // data memory
