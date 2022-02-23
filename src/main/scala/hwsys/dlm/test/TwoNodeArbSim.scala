@@ -97,8 +97,8 @@ object TwoNodeArbSim {
       dut
     }.doSim("twonode_with_netarb", 99) { dut =>
       // params
-      val txnLen = 32
-      val txnCnt = 128
+      val txnLen = 16
+      val txnCnt = 256
       val txnMaxLen = sysConf.maxTxnLen-1
 
       dut.clockDomain.forkStimulus(period = 10)
@@ -106,7 +106,7 @@ object TwoNodeArbSim {
       // cmd memory
       val fNId = (i: Int, j: Int) => 1
       val fCId = (i: Int, j: Int) => 0
-      val fTId = (i: Int, j: Int) => i*txnLen + j
+      val fTId = (i: Int, j: Int) => i*txnLen/2 + j
       val fLkAttr = (i: Int, j: Int) => 0
 
       val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)(fNId, fCId, fTId, fLkAttr).toArray

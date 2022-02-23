@@ -483,7 +483,7 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
 
     val txnOffs = curTxnId << conf.wMaxTxnLen
     val lkItem = lkMemRmt.readSync(txnOffs + cntRlseReqRmt(curTxnId))
-    val getAllLkResp = (cntLkReqRmt(curTxnId) === cntLkRespRmt(curTxnId)) && (cntLkReqRmt(curTxnId) === cntLkRespRmt(curTxnId))
+    val getAllLkResp = (cntLkReqLoc(curTxnId) === cntLkRespLoc(curTxnId)) && (cntLkReqRmt(curTxnId) === cntLkRespRmt(curTxnId))
 
     CS_TXN.whenIsActive {
 

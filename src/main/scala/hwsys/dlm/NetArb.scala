@@ -40,14 +40,15 @@ class SendArbiter(cntTxnMan: Int, sysConf: SysConfig) extends Component {
 
     // def
     io.wrDataV.map(_.setBlocked())
-    io.sendQ << lkReqJoin
+
+    io.sendQ << lkReqJoin.continueWhen(isActive(LKREQ)) // why must have isActive??
 
     LKREQ.whenIsActive{
       when(io.sendQ.fire){
         rMskWr := mskWr
         (rWrLen, io.lkReqV).zipped.foreach(_ := _.wLen)
+        when(mskWr.orR) (goto(WRDATA))
       }
-      when(mskWr.orR) (goto(WRDATA))
     }
 
     WRDATA.whenIsActive{
@@ -55,6 +56,8 @@ class SendArbiter(cntTxnMan: Int, sysConf: SysConfig) extends Component {
       val ohTxnMan = OHMasking.first(rMskWr)
       val idTxnMan = OHToUInt(ohTxnMan)
       val nBeat: UInt = U(1) << rWrLen(idTxnMan)
+
+      val wireMskWr = cloneOf(rMskWr).setAll()
 
       // connect wrData to the target txnMan and cnt
       io.sendQ << io.wrDataV(idTxnMan)
@@ -64,11 +67,10 @@ class SendArbiter(cntTxnMan: Int, sysConf: SysConfig) extends Component {
           // clear the bit
           rMskWr(idTxnMan).clear()
           cntBeat := 0
+          wireMskWr(idTxnMan) := False // one cycle earlier, to avoid over wr
+          when(~((rMskWr & wireMskWr).orR))(goto(LKREQ))
         }
       }
-
-      // no more write
-      when(~rMskWr.orR) (goto(LKREQ))
     }
 
   }
@@ -181,12 +183,14 @@ class ReqDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
     // cast to bit vectors
     val rLkReq = Vec(Reg(LkReq(sysConf, false)), cntTxnMan)
     val lkReqBitV = io.reqQ.payload(widthOf(rLkReq) - 1 downto 0).subdivideIn(SlicesCount(cntTxnMan))
+    val lkReqV = Vec(LkReq(sysConf, false), cntTxnMan)
+    (lkReqV, lkReqBitV).zipped.foreach(_.assignFromBits(_))
 
     val rMskWr = Reg(Bits(cntTxnMan bits)).init(0)
     val MskWr = Bits(cntTxnMan bits)
     for (i <- MskWr.bitsRange) {
       // if lockReq of Rd is granted, consume the followup read data
-      MskWr(i) := rLkReq(i).lkRelease && rLkReq(i).lkType
+      MskWr(i) := lkReqV(i).lkRelease && lkReqV(i).lkType && ~lkReqV(i).txnAbt
     }
 
     io.lkReq.valid := False
@@ -203,7 +207,7 @@ class ReqDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
       when(io.reqQ.fire) {
         rMskWr := MskWr
         // cast to LkResp entry
-        (rLkReq, lkReqBitV).zipped.foreach(_.assignFromBits(_))
+        rLkReq := lkReqV
         goto(LKREQFIRE)
       }
     }
