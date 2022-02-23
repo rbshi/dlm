@@ -15,10 +15,14 @@ class SendArbiter(cntTxnMan: Int, sysConf: SysConfig) extends Component {
   }
 
   // #txnMan <= 8
-  val lkReqJoin = Stream(Bits(512 bits))
   require(cntTxnMan<=8, "Only support #txnMan <= 8 now!")
-  lkReqJoin.arbitrationFrom(StreamJoin.vec(io.lkReqV))
-  lkReqJoin.payload := io.lkReqV.asBits.resized
+
+  val lkReqJoin = Stream(Bits(512 bits))
+  val tmpJoin = StreamJoin.vec(io.lkReqV)
+
+  // gather the payload of lkReqV and resize
+  lkReqJoin.arbitrationFrom(tmpJoin)
+  lkReqJoin.payload := tmpJoin.payload.asBits.resized
 
   val rWrLen = Vec(Reg(UInt(3 bits)), cntTxnMan) // maxLen = 64B << 7 = 8192 B
   val cntBeat = Reg(UInt(8 bits)).init(0)
@@ -88,13 +92,16 @@ class RecvDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
 
     // cast to bit vectors
     val rLkResp = Vec(Reg(LkResp(sysConf, false)), cntTxnMan)
+
     val lkRespBitV = io.recvQ.payload(widthOf(rLkResp) - 1 downto 0).subdivideIn(SlicesCount(cntTxnMan))
+    val lkRespV = Vec(LkResp(sysConf, false), cntTxnMan)
+    (lkRespV, lkRespBitV).zipped.foreach(_.assignFromBits(_))
 
     val rMskRd = Reg(Bits(cntTxnMan bits)).init(0)
     val mskRd = Bits(cntTxnMan bits)
     for (i <- mskRd.bitsRange) {
       // if lockReq of Rd is granted, consume the followup read data
-      mskRd(i) := ~rLkResp(i).lkRelease && ~rLkResp(i).lkType && (rLkResp(i).respType === LockRespType.grant)
+      mskRd(i) := ~lkRespV(i).lkRelease && ~lkRespV(i).lkType && (lkRespV(i).respType === LockRespType.grant)
     }
 
     io.recvQ.ready := isActive(LKRESP)
@@ -107,7 +114,7 @@ class RecvDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
       when(io.recvQ.fire) {
         rMskRd := mskRd
         // cast to LkResp entry
-        (rLkResp, lkRespBitV).zipped.foreach(_.assignFromBits(_))
+        rLkResp := lkRespV
         goto(LKDISPATCH)
       }
     }
@@ -135,7 +142,7 @@ class RecvDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
       val ohTxnMan = OHMasking.first(rMskRd)
       val idTxnMan = OHToUInt(ohTxnMan)
       val nBeat: UInt = U(1) << rLkResp(idTxnMan).wLen
-      val wireMskRd = cloneOf(rMskRd).clearAll()
+      val wireMskRd = cloneOf(rMskRd).setAll()
 
       io.rdDataV(idTxnMan) << io.recvQ
 
@@ -144,13 +151,11 @@ class RecvDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
         when(cntBeat === (nBeat - 1)) {
           // clear the bit
           rMskRd(idTxnMan).clear()
-          wireMskRd(idTxnMan) := False // one cycle earlier, to avoid over write
+          wireMskRd(idTxnMan) := False // one cycle earlier, to avoid over rd
           cntBeat := 0
+          when(~((rMskRd & wireMskRd).orR))(goto(LKRESP))
         }
       }
-
-      // no more rd
-      when(~wireMskRd.orR)(goto(LKRESP))
     }
   }
 
@@ -223,7 +228,7 @@ class ReqDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
       val ohTxnMan = OHMasking.first(rMskWr)
       val idTxnMan = OHToUInt(ohTxnMan)
       val nBeat: UInt = U(1) << rLkReq(idTxnMan).wLen
-      val wireMskWr = cloneOf(rMskWr).clearAll()
+      val wireMskWr = cloneOf(rMskWr).setAll()
 
       io.wrData << io.reqQ
 
@@ -233,12 +238,10 @@ class ReqDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
           // clear the bit
           rMskWr(idTxnMan).clear()
           wireMskWr(idTxnMan) := False // one cycle earlier, to avoid over write
+          when(~((rMskWr & wireMskWr).orR))(goto(LKREQ))
           cntBeat := 0
         }
       }
-
-      // no more rd
-      when(~wireMskWr.orR)(goto(LKREQ))
     }
   }
 
@@ -260,32 +263,36 @@ class RespArbiter(cntTxnMan: Int, sysConf: SysConfig) extends Component {
 
   val fsm = new StateMachine {
     val LKRESP = new State with EntryPoint
-    val WRDATA = new State
+    val RDDATA = new State
 
     val lkRespSlowDown = io.lkResp.slowdown(cntTxnMan).continueWhen(isActive(LKRESP))
 
     io.respQ.arbitrationFrom(lkRespSlowDown)
-    io.respQ.payload := lkRespSlowDown.asBits.resized
+    io.respQ.payload := lkRespSlowDown.payload.asBits.resized
 
     LKRESP.whenIsActive {
       // record cntBeat
-      when(io.lkResp.fire && io.lkResp.lkRelease && ~io.lkResp.lkType && (io.lkResp.respType === LockRespType.grant)) {
+      val isRdRespGrant = ~io.lkResp.lkRelease && ~io.lkResp.lkType && (io.lkResp.respType === LockRespType.grant)
+      when(io.lkResp.fire && isRdRespGrant) {
         cntBeat := cntBeat + (U(1) << io.lkResp.wLen)
       }
 
       when(io.respQ.fire) {
-        when(cntBeat =/= 0) {
-          cntBeat := 0
-          goto(WRDATA)
+        // take care of the last word
+        when(cntBeat =/= 0 || isRdRespGrant) {
+          goto(RDDATA)
         }
       }
     }
 
-    WRDATA.whenIsActive {
+    RDDATA.whenIsActive {
       io.respQ << io.rdData
       when(io.respQ.fire) {
         cntBeat := cntBeat - 1
-        when(cntBeat === 1)(goto(LKRESP))
+        when(cntBeat === 1){
+          cntBeat := 0
+          goto(LKRESP)
+        }
       }
     }
   }

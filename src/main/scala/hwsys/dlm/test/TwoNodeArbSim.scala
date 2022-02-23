@@ -104,10 +104,10 @@ object TwoNodeArbSim {
       dut.clockDomain.forkStimulus(period = 10)
 
       // cmd memory
-      val fNId = (i: Int, j: Int) => j%sysConf.nNode
-      val fCId = (i: Int, j: Int) => j%sysConf.nCh
-      val fTId = (i: Int, j: Int) => i*txnLen/4 + j
-      val fLkAttr = (i: Int, j: Int) => 1
+      val fNId = (i: Int, j: Int) => 1
+      val fCId = (i: Int, j: Int) => 0
+      val fTId = (i: Int, j: Int) => i*txnLen + j
+      val fLkAttr = (i: Int, j: Int) => 0
 
       val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)(fNId, fCId, fTId, fLkAttr).toArray
       val cmdAxiMem = SimDriver.instAxiMemSim(dut.n0.io.cmdAxi, dut.clockDomain, Some(txnCtx))
