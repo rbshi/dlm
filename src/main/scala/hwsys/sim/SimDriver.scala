@@ -22,8 +22,8 @@ object SimDriver {
   val axiMemSimConf = AxiMemorySimConfig(
     maxOutstandingReads = 128,
     maxOutstandingWrites = 128,
-    readResponseDelay = 3,
-    writeResponseDelay = 3
+    readResponseDelay = 10,
+    writeResponseDelay = 10
   )
 
   def instAxiMemSim(axi: Axi4, clockDomain: ClockDomain, memCtx: Option[Array[Byte]]) : AxiMemorySim = {

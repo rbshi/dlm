@@ -93,8 +93,9 @@ object TwoNodeSim {
       val fCId = (i: Int, j: Int) => j%sysConf.nCh
       val fTId = (i: Int, j: Int) => i*txnLen/4 + j
       val fLkAttr = (i: Int, j: Int) => 1
+      val fWLen = (i: Int, j: Int) => j%3
 
-      val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)(fNId, fCId, fTId, fLkAttr).toArray
+      val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)(fNId, fCId, fTId, fLkAttr, fWLen).toArray
       val cmdAxiMem = SimDriver.instAxiMemSim(dut.n0.io.cmdAxi, dut.clockDomain, Some(txnCtx))
 
       // data memory

@@ -4,6 +4,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi._
 import hwsys.util.Helpers._
+import spinal.core.Component.push
 
 
 case class TxnAgentIO(conf: SysConfig) extends Bundle {
@@ -57,16 +58,21 @@ class TxnAgent(conf: SysConfig) extends Component {
     io.axi.w.payload.strb.setAll()
   }
 
-  val nBeat = RegNextWhen((U(1)<<reqFork2.wLen)-1, reqFork2.fire)
-  val axiWrVld = RegNextWhen(True, reqFork2.fire, False)
-  axiWrVld.clearWhen(io.axi.w.last && io.axi.w.fire)
+  // axi.aw / axi.w is individually processed (nBeat should be fifo)
+  val nBeatQ = StreamFifoLowLatency(cloneOf(io.lkReq.wLen), 8)
+  nBeatQ.io.push.payload := ((U(1)<<reqFork2.wLen)-1).resized
+  nBeatQ.io.push.valid := reqFork2.fire
+  nBeatQ.io.pop.ready := io.axi.w.last && io.axi.w.fire
 
-  io.axi.w.data := io.wrData.payload
-  io.axi.w.last := (nBeat === 0)
-  when(axiWrVld) {io.axi.w.arbitrationFrom(io.wrData)} otherwise {
-    io.wrData.ready.clear()
-    io.axi.w.valid.clear()
-  }
+  val cntBeat = Counter(io.lkReq.wLen.getWidth bits, io.axi.w.fire)
+  when(io.axi.w.last && io.axi.w.fire) (cntBeat.clear())
+
+  val wrDataQ = cloneOf(io.wrData)
+  wrDataQ << io.wrData.queue(8)
+  val wrDataQCtrl = wrDataQ.continueWithToken(reqFork2.fire, io.axi.w.last && io.axi.w.fire, 8)
+  io.axi.w.data := wrDataQCtrl.payload
+  io.axi.w.last := (cntBeat === nBeatQ.io.pop.payload)
+  io.axi.w.arbitrationFrom(wrDataQCtrl)
 
   // wr resp
   io.axi.b.ready.set()

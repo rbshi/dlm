@@ -87,7 +87,7 @@ object TwoNodeArbSim {
       override val nNode: Int = 2
       override val nCh: Int = 2
       override val nTxnMan: Int = 1
-      override val nLtPart: Int = 1
+      override val nLtPart: Int = 2
       override val nLock: Int = 4096 * nLtPart
     }
 
@@ -104,12 +104,13 @@ object TwoNodeArbSim {
       dut.clockDomain.forkStimulus(period = 10)
 
       // cmd memory
-      val fNId = (i: Int, j: Int) => 1
+      val fNId = (i: Int, j: Int) => j%2
       val fCId = (i: Int, j: Int) => 0
-      val fTId = (i: Int, j: Int) => i*txnLen/2 + j
-      val fLkAttr = (i: Int, j: Int) => 0
+      val fTId = (i: Int, j: Int) => i*txnLen/4 + j
+      val fLkAttr = (i: Int, j: Int) => j%2
+      val fWLen = (i: Int, j: Int) => j%3
 
-      val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)(fNId, fCId, fTId, fLkAttr).toArray
+      val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)(fNId, fCId, fTId, fLkAttr, fWLen).toArray
       val cmdAxiMem = SimDriver.instAxiMemSim(dut.n0.io.cmdAxi, dut.clockDomain, Some(txnCtx))
 
       // data memory

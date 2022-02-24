@@ -73,7 +73,10 @@ object OneNodeSim {
       val fCId = (i: Int, j: Int) => 0
       val fTId = (i: Int, j: Int) => i + j
       val fLkAttr = (i: Int, j: Int) => 1
-      val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)(fNId, fCId, fTId, fLkAttr).toArray
+      val fWLen = (i: Int, j: Int) => 0
+
+
+      val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)(fNId, fCId, fTId, fLkAttr, fWLen).toArray
       val cmdAxiMem = SimDriver.instAxiMemSim(dut.io.cmdAxi, dut.clockDomain, Some(txnCtx))
 
       dut.io.start #= false
