@@ -3,13 +3,15 @@ package hwsys.dlm.test
 import spinal.core._
 import spinal.core.sim._
 import spinal.lib.bus.amba4.axi.Axi4
-import spinal.lib.master
+import spinal.lib.{master, slave}
 import hwsys.dlm._
 import hwsys.sim._
 import hwsys.util.Helpers._
 
+import scala.Stream
 
-class TwoNodeArbTop(sysConf: SysConfig) extends Component {
+
+class TwoNodeArbLatTop(sysConf: SysConfig) extends Component {
 
   // node0: with txnMan only
   val n0 = new Area {
@@ -74,13 +76,22 @@ class TwoNodeArbTop(sysConf: SysConfig) extends Component {
   recvDisp.io.lkRespV(0) >> n0.txnMan.io.lkRespRmt
   recvDisp.io.rdDataV(0) >> n0.txnMan.io.rdRmt
 
-  // TODO: add some latency here
-  sendArb.io.sendQ >/-> reqDisp.io.reqQ
-  respArb.io.respQ >/-> recvDisp.io.recvQ
+  val io = new Bundle {
+    val sendQ = master Stream Bits(512 bits)
+    val respQ = master Stream Bits(512 bits)
+    val reqQ = slave Stream Bits(512 bits)
+    val recvQ = slave Stream Bits(512 bits)
+  }
+
+  sendArb.io.sendQ >> io.sendQ
+  respArb.io.respQ >> io.respQ
+  reqDisp.io.reqQ << io.reqQ
+  recvDisp.io.recvQ << io.recvQ
+
 }
 
 
-object TwoNodeArbSim {
+object TwoNodeArbLatSim {
   def main(args: Array[String]): Unit = {
 
     implicit val sysConf = new SysConfig {
@@ -92,8 +103,12 @@ object TwoNodeArbSim {
     }
 
     SimConfig.withWave.compile {
-      val dut = new TwoNodeArbTop(sysConf)
+      val dut = new TwoNodeArbLatTop(sysConf)
       dut.n0.txnMan.io.simPublic()
+      dut.sendArb.io.simPublic()
+      dut.respArb.io.simPublic()
+      dut.reqDisp.io.simPublic()
+      dut.recvDisp.io.simPublic()
       dut
     }.doSim("twonode_with_netarb", 99) { dut =>
       // params
@@ -104,11 +119,11 @@ object TwoNodeArbSim {
       dut.clockDomain.forkStimulus(period = 10)
 
       // cmd memory
-      val fNId = (i: Int, j: Int) => j%2
+      val fNId = (i: Int, j: Int) => 1
       val fCId = (i: Int, j: Int) => 0
-      val fTId = (i: Int, j: Int) => i*txnLen/4 + j
-      val fLkAttr = (i: Int, j: Int) => j%2
-      val fWLen = (i: Int, j: Int) => j%3
+      val fTId = (i: Int, j: Int) => i*txnLen + j
+      val fLkAttr = (i: Int, j: Int) => 0
+      val fWLen = (i: Int, j: Int) => 0
 
       val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen)(fNId, fCId, fTId, fLkAttr, fWLen).toArray
       val cmdAxiMem = SimDriver.instAxiMemSim(dut.n0.io.cmdAxi, dut.clockDomain, Some(txnCtx))
@@ -116,6 +131,9 @@ object TwoNodeArbSim {
       // data memory
       val n0Axi = SimDriver.instAxiMemSim(dut.n0.io.axi, dut.clockDomain, None)
       val n1Axi = SimDriver.instAxiMemSim(dut.n1.io.axi, dut.clockDomain, None)
+
+      val l2rNet = SimDriver.streamDelayPipe(dut.clockDomain, dut.io.sendQ, dut.io.reqQ, 1000)
+      val r2lNet = SimDriver.streamDelayPipe(dut.clockDomain, dut.io.respQ, dut.io.recvQ, 1000)
 
       dut.n0.io.start #= false
       // wait the fifo (empty_ptr) to reset
