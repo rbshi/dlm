@@ -9,7 +9,7 @@ import hwsys.sim._
 import hwsys.util.Helpers._
 
 
-class TwoNodeArbTop(sysConf: SysConfig) extends Component {
+class TwoNodeArbTop(implicit sysConf: SysConfig) extends Component {
 
   // node0: with txnMan only
   val n0 = new Area {
@@ -56,10 +56,10 @@ class TwoNodeArbTop(sysConf: SysConfig) extends Component {
   }
 
   // NetArbs
-  val sendArb = new SendArbiter(1, sysConf)
-  val reqDisp = new ReqDispatcher(1, sysConf)
-  val respArb = new RespArbiter(1, sysConf)
-  val recvDisp = new RecvDispatcher(1, sysConf)
+  val sendArb = new SendArbiter(1)
+  val reqDisp = new ReqDispatcher(1)
+  val respArb = new RespArbiter(1)
+  val recvDisp = new RecvDispatcher(1)
 
   // connect
   n0.txnMan.io.lkReqRmt >> sendArb.io.lkReqV(0)
@@ -92,7 +92,7 @@ object TwoNodeArbSim {
     }
 
     SimConfig.withWave.compile {
-      val dut = new TwoNodeArbTop(sysConf)
+      val dut = new TwoNodeArbTop()
       dut.n0.txnMan.io.simPublic()
       dut
     }.doSim("twonode_with_netarb", 99) { dut =>

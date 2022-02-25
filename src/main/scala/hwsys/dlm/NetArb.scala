@@ -7,7 +7,7 @@ import spinal.lib.fsm._
 //TODO: for flow control at local node, should expose lk_batch or data_batch
 
 // local node
-class SendArbiter(cntTxnMan: Int, sysConf: SysConfig) extends Component {
+class SendArbiter(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component {
   val io = new Bundle {
     val lkReqV = Vec(slave Stream LkReq(sysConf, false), cntTxnMan)
     val wrDataV = Vec(slave Stream Bits(512 bits), cntTxnMan)
@@ -76,7 +76,7 @@ class SendArbiter(cntTxnMan: Int, sysConf: SysConfig) extends Component {
   }
 }
 
-class RecvDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
+class RecvDispatcher(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component {
 
   val io = new Bundle {
     val recvQ = slave Stream Bits(512 bits)
@@ -164,7 +164,7 @@ class RecvDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
 }
 
 // remote node
-class ReqDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
+class ReqDispatcher(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component {
 
   val io = new Bundle {
     val reqQ = slave Stream Bits(512 bits)
@@ -253,7 +253,7 @@ class ReqDispatcher(cntTxnMan: Int, sysConf: SysConfig) extends Component {
 
 
 // TODO: RespArbiter & RecvDispatcher should pack the lock with 8, non-related to cntTxnMan. (Here just in case the #remote_lk is not multiple of 8)
-class RespArbiter(cntTxnMan: Int, sysConf: SysConfig) extends Component {
+class RespArbiter(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component {
   val io = new Bundle {
     val lkResp = slave Stream LkResp(sysConf, false)
     val rdData = slave Stream Bits(512 bits)
@@ -302,8 +302,12 @@ class RespArbiter(cntTxnMan: Int, sysConf: SysConfig) extends Component {
   }
 }
 
-
-
+class ArbDataFlow(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component {
+  val sendArb = new SendArbiter(cntTxnMan)
+  val reqDisp = new ReqDispatcher(cntTxnMan)
+  val respArb = new RespArbiter(cntTxnMan)
+  val recvDisp = new RecvDispatcher(cntTxnMan)
+}
 
 
 

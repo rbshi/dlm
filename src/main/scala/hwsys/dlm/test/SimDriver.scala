@@ -35,13 +35,13 @@ object SimConversions {
 // Init methods
 object SimInit {
 
-  def txnEntrySimInt(txnCnt: Int, txnLen: Int, txnMaxLen: Int)(fNId: (Int, Int) => Int, fCId: (Int, Int) => Int, fTId: (Int, Int) => Int, fLk: (Int, Int) => Int, fWLen: (Int, Int) => Int)(implicit sysConf: SysConfig): Seq[Byte] = {
+  def txnEntrySimInt(txnCnt: Int, txnLen: Int, txnMaxLen: Int, tIdOffs: Int = 0)(fNId: (Int, Int) => Int, fCId: (Int, Int) => Int, fTId: (Int, Int) => Int, fLk: (Int, Int) => Int, fWLen: (Int, Int) => Int)(implicit sysConf: SysConfig): Seq[Byte] = {
     var txnMem = Seq.empty[Byte]
     for (i <- 0 until txnCnt) {
       // txnHd
       txnMem = txnMem ++ MemStructSim.bigIntToBytes(BigInt(txnLen), 8)
       for (j <- 0 until txnLen) {
-        txnMem = txnMem ++ TxnEntrySim(fNId(i, j), fCId(i, j), fTId(i, j), fLk(i, j), fWLen(i, j)).asBytes
+        txnMem = txnMem ++ TxnEntrySim(fNId(i, j), fCId(i, j), fTId(i, j) + tIdOffs, fLk(i, j), fWLen(i, j)).asBytes
       }
       for (j <- 0 until (txnMaxLen-txnLen))
         txnMem = txnMem ++ MemStructSim.bigIntToBytes(BigInt(0), 8)

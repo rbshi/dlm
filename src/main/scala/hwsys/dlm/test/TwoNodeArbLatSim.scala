@@ -11,7 +11,7 @@ import hwsys.util.Helpers._
 import scala.Stream
 
 
-class TwoNodeArbLatTop(sysConf: SysConfig) extends Component {
+class TwoNodeArbLatTop(implicit val sysConf: SysConfig) extends Component {
 
   // node0: with txnMan only
   val n0 = new Area {
@@ -58,10 +58,10 @@ class TwoNodeArbLatTop(sysConf: SysConfig) extends Component {
   }
 
   // NetArbs
-  val sendArb = new SendArbiter(1, sysConf)
-  val reqDisp = new ReqDispatcher(1, sysConf)
-  val respArb = new RespArbiter(1, sysConf)
-  val recvDisp = new RecvDispatcher(1, sysConf)
+  val sendArb = new SendArbiter(1)
+  val reqDisp = new ReqDispatcher(1)
+  val respArb = new RespArbiter(1)
+  val recvDisp = new RecvDispatcher(1)
 
   // connect
   n0.txnMan.io.lkReqRmt >> sendArb.io.lkReqV(0)
@@ -103,7 +103,7 @@ object TwoNodeArbLatSim {
     }
 
     SimConfig.withWave.compile {
-      val dut = new TwoNodeArbLatTop(sysConf)
+      val dut = new TwoNodeArbLatTop()
       dut.n0.txnMan.io.simPublic()
       dut.sendArb.io.simPublic()
       dut.respArb.io.simPublic()
