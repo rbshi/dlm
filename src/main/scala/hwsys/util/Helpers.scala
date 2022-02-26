@@ -57,6 +57,39 @@ object Helpers {
     }
 
   }
+
+
+  implicit class BundleUtils(bd: Bundle) {
+
+    /** AutoConnect the bundle with an other bundle by name */
+    def connectAllByName(that: Bundle): Unit = {
+      for ((name, element) <- bd.elements) {
+        val other = that.find(name)
+        if (other == null)
+          LocatedPendingError(s"Bundle assignment is not complete. Missing $name")
+        else element match {
+          // FIXME: recursive is NOT supported now
+          // case b: Bundle => b.assignAllByName(other.asInstanceOf[Bundle])
+          case _         => element <> other
+        }
+      }
+    }
+
+    /** AutoConnect all possible signal fo the bundle with an other bundle by name */
+    def connectSomeByName(that: Bundle): Unit = {
+      for ((name, element) <- bd.elements) {
+        val other = that.find(name)
+        if (other != null) {
+          element match {
+            // case b: Bundle => b.assignSomeByName(other.asInstanceOf[Bundle])
+            case _         => element <> other
+          }
+        }
+      }
+    }
+
+  }
+
 }
 
 

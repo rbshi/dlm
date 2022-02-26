@@ -2,48 +2,17 @@ package hwsys.dlm.test
 
 import spinal.core._
 import spinal.core.sim._
-import spinal.lib.bus.amba4.axi.Axi4
-import spinal.lib.{master, slave}
 import hwsys.dlm._
 import hwsys.sim._
 import hwsys.util.Helpers._
 
-class NodeIO(implicit sysConf: SysConfig) extends Bundle {
-
-  val nodeId = in UInt(sysConf.wNId bits)
-  val axi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan + sysConf.nNode -1)
-  val cmdAxi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan)
-  val start = in Bool()
-  val txnNumTotal = in UInt(32 bits)
-  val cmdAddrOffs = in Vec(UInt(32 bits), sysConf.nTxnMan) //NOTE: unit size 64B
-
-  val sendQ = master Stream Bits(512 bits)
-  val respQ = master Stream Bits(512 bits)
-  val reqQ = slave Stream Bits(512 bits)
-  val recvQ = slave Stream Bits(512 bits)
-}
-
 
 class TwoNodeTop(implicit sysConf: SysConfig) extends Component {
-
-
   val io = Array.fill(2)(new NodeIO())
   val n0, n1 = new NodeWrap()
-
   Seq(n0, n1).zipWithIndex.foreach { case(n, idx) =>
-    n.io.nodeId <> io(idx).nodeId
-    n.io.axi <> io(idx).axi
-    n.io.cmdAxi <> io(idx).cmdAxi
-    n.io.start <> io(idx).start
-    n.io.txnNumTotal <> io(idx).txnNumTotal
-    n.io.cmdAddrOffs <> io(idx).cmdAddrOffs
-
-    n.io.sendQ <> io(idx).sendQ
-    n.io.respQ <> io(idx).respQ
-    n.io.reqQ  <> io(idx).reqQ
-    n.io.recvQ <> io(idx).recvQ
+    n.io.connectAllByName(io(idx))
   }
-
 }
 
 object NodeWrapSim {
@@ -72,7 +41,7 @@ object NodeWrapSim {
       // params
       val txnLen = 16
       val txnCnt = 256
-      val txnMaxLen = sysConf.maxTxnLen-1
+      val txnMaxLen = sysConf.maxTxnLen - 1
 
       for (idx <- 0 until 2) {
         for (iTxnMan <- 0 until sysConf.nTxnMan) {
@@ -88,7 +57,7 @@ object NodeWrapSim {
           // data memory
           SimDriver.instAxiMemSim(dut.io(idx).axi(iTxnMan), dut.clockDomain, None)
         }
-        for (iTxnAgent <- sysConf.nTxnMan until sysConf.nTxnMan + sysConf.nNode -1 ) {
+        for (iTxnAgent <- sysConf.nTxnMan until sysConf.nTxnMan + sysConf.nNode - 1) {
           // data memory
           SimDriver.instAxiMemSim(dut.io(idx).axi(iTxnAgent), dut.clockDomain, None)
         }
@@ -108,7 +77,7 @@ object NodeWrapSim {
       }
 
       // wait the fifo (empty_ptr) to reset
-      dut.clockDomain.waitSampling(sysConf.nLock/sysConf.nLtPart+1000)
+      dut.clockDomain.waitSampling(sysConf.nLock / sysConf.nLtPart + 1000)
 
       // start
       for (idx <- 0 until 2) {
@@ -117,17 +86,15 @@ object NodeWrapSim {
         dut.io(idx).start #= false
       }
 
-      dut.n0.io.done.foreach(a => dut.clockDomain.waitSamplingWhere(a.toBoolean))
-      dut.n1.io.done.foreach(a => dut.clockDomain.waitSamplingWhere(a.toBoolean))
-
-      Seq(dut.n0, dut.n1).zipWithIndex.foreach { case(n, idx) =>
-        Seq(n.io.cntTxnLd, n.io.cntTxnCmt, n.io.cntTxnAbt, n.io.cntClk).foreach { sigV =>
+      dut.io.foreach(_.done.foreach(a => dut.clockDomain.waitSamplingWhere(a.toBoolean)))
+      dut.io.zipWithIndex.foreach { case (n, idx) =>
+        Seq(n.cntTxnLd, n.cntTxnCmt, n.cntTxnAbt, n.cntClk).foreach { sigV =>
           sigV.foreach { sig =>
             println(s"Node[$idx]  ${sig.getName()} = ${sig.toBigInt}")
           }
         }
       }
-
     }
   }
+
 }

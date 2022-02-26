@@ -4,27 +4,28 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.Axi4
 
+class NodeIO(implicit sysConf: SysConfig) extends Bundle {
+  val nodeId = in UInt(sysConf.wNId bits)
+  val axi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan + sysConf.nNode -1)
+  val cmdAxi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan)
+  val start = in Bool()
+  val txnNumTotal = in UInt(32 bits)
+  val cmdAddrOffs = in Vec(UInt(32 bits), sysConf.nTxnMan) //NOTE: unit size 64B
+
+  val done = out Vec(Bool(), sysConf.nTxnMan)
+  val cntTxnCmt, cntTxnAbt, cntTxnLd = out Vec(UInt(32 bits), sysConf.nTxnMan)
+  val cntClk = out Vec(UInt(40 bits), sysConf.nTxnMan)
+
+  // network
+  val sendQ = master Stream Bits(512 bits)
+  val respQ = master Stream Bits(512 bits)
+  val reqQ = slave Stream Bits(512 bits)
+  val recvQ = slave Stream Bits(512 bits)
+}
 
 class NodeWrap(implicit sysConf: SysConfig) extends Component {
 
-  val io = new Bundle {
-    val nodeId = in UInt(sysConf.wNId bits)
-    val axi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan + sysConf.nNode -1)
-    val cmdAxi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan)
-    val start = in Bool()
-    val txnNumTotal = in UInt(32 bits)
-    val cmdAddrOffs = in Vec(UInt(32 bits), sysConf.nTxnMan) //NOTE: unit size 64B
-
-    val done = out Vec(Bool(), sysConf.nTxnMan)
-    val cntTxnCmt, cntTxnAbt, cntTxnLd = out Vec(UInt(32 bits), sysConf.nTxnMan)
-    val cntClk = out Vec(UInt(40 bits), sysConf.nTxnMan)
-
-    // network
-    val sendQ = master Stream Bits(512 bits)
-    val respQ = master Stream Bits(512 bits)
-    val reqQ = slave Stream Bits(512 bits)
-    val recvQ = slave Stream Bits(512 bits)
-  }
+  val io = new NodeIO()
 
   val txnManAry = Array.fill(sysConf.nTxnMan)(new TxnManCS(sysConf))
   val ltMCh = new LtTop(sysConf)
