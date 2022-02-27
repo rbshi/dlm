@@ -67,11 +67,8 @@ object Helpers {
         val other = that.find(name)
         if (other == null)
           LocatedPendingError(s"Bundle assignment is not complete. Missing $name")
-        else element match {
-          // FIXME: recursive is NOT supported now
-          // case b: Bundle => b.assignAllByName(other.asInstanceOf[Bundle])
-          case _         => element <> other
-        }
+        else
+          element <> other // NOTE: no recursive is required -> bundle has autoConnect
       }
     }
 
@@ -79,18 +76,22 @@ object Helpers {
     def connectSomeByName(that: Bundle): Unit = {
       for ((name, element) <- bd.elements) {
         val other = that.find(name)
-        if (other != null) {
-          element match {
-            // case b: Bundle => b.assignSomeByName(other.asInstanceOf[Bundle])
-            case _         => element <> other
-          }
-        }
+        if (other != null)
+          element <> other
       }
     }
 
   }
 
+  implicit class StreamFifoUtils[T <: Data](streamFifo: StreamFifo[T]) {
+    def flushWhen(enFlush: Bool): Unit = {
+      streamFifo.io.flush := enFlush
+    }
+  }
+
 }
+
+
 
 
 
