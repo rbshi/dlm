@@ -12,6 +12,9 @@ class SendArbiter(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component
     val lkReqV = Vec(slave Stream LkReq(sysConf, false), cntTxnMan)
     val wrDataV = Vec(slave Stream Bits(512 bits), cntTxnMan)
     val sendQ = master Stream Bits(512 bits)
+    // status
+    val statusVld = out(Bool()).default(False)
+    val nReq, nWrCmtReq, nRdGetReq = out(UInt(4 bits)).default(0)
   }
 
   // #txnMan <= 8
@@ -27,9 +30,10 @@ class SendArbiter(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component
   val rWrLen = Vec(Reg(UInt(3 bits)), cntTxnMan) // maxLen = 64B << 7 = 8192 B
   val cntBeat = Reg(UInt(8 bits)).init(0)
 
-  val mskWr = Bits(cntTxnMan bits)
+  val mskWr, mskRdGet = Bits(cntTxnMan bits)
   for (i <- mskWr.bitsRange){
     mskWr(i) := io.lkReqV(i).lkRelease && io.lkReqV(i).lkType && ~io.lkReqV(i).txnAbt // NOTE: if txn not abt -> wrData
+    mskRdGet(i) := ~io.lkReqV(i).lkRelease && ~io.lkReqV(i).lkType
   }
 
   val fsm = new StateMachine {
@@ -44,6 +48,12 @@ class SendArbiter(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component
     io.sendQ << lkReqJoin.continueWhen(isActive(LKREQ)) // why must have isActive??
 
     LKREQ.whenIsActive{
+
+      io.statusVld := True
+      io.nReq := cntTxnMan
+      io.nWrCmtReq := CountOne(mskWr)
+      io.nRdGetReq := CountOne(mskRdGet)
+
       when(io.sendQ.fire){
         rMskWr := mskWr
         (rWrLen, io.lkReqV).zipped.foreach(_ := _.wLen)
@@ -82,6 +92,10 @@ class RecvDispatcher(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Compon
     val recvQ = slave Stream Bits(512 bits)
     val lkRespV = Vec(master Stream LkResp(sysConf, false), cntTxnMan)
     val rdDataV = Vec(master Stream Bits(512 bits), cntTxnMan)
+
+    // status
+    val statusVld = Bool().default(False)
+    val nResp, nWrCmtResp, nRdGetResp = UInt(4 bits).default(0)
   }
 
   val cntBeat = Reg(UInt(8 bits)).init(0)
@@ -100,10 +114,11 @@ class RecvDispatcher(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Compon
     (lkRespV, lkRespBitV).zipped.foreach(_.assignFromBits(_))
 
     val rMskRd = Reg(Bits(cntTxnMan bits)).init(0)
-    val mskRd = Bits(cntTxnMan bits)
+    val mskRd, mskWrCmt = Bits(cntTxnMan bits)
     for (i <- mskRd.bitsRange) {
       // if lockReq of Rd is granted, consume the followup read data
       mskRd(i) := ~lkRespV(i).lkRelease && ~lkRespV(i).lkType && (lkRespV(i).respType === LockRespType.grant)
+      mskWrCmt(i) := lkRespV(i).lkRelease && lkRespV(i).lkType && ~lkRespV(i).txnAbt
     }
 
     io.recvQ.ready := isActive(LKRESP)
@@ -112,6 +127,11 @@ class RecvDispatcher(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Compon
     io.rdDataV.map(_.setIdle())
 
     LKRESP.whenIsActive {
+
+      io.statusVld := True
+      io.nResp := cntTxnMan
+      io.nWrCmtResp := CountOne(mskWrCmt)
+      io.nRdGetResp := CountOne(mskRd)
 
       when(io.recvQ.fire) {
         rMskRd := mskRd

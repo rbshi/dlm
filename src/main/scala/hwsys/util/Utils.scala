@@ -40,3 +40,20 @@ case class CntDynmicBound(upBoundEx: UInt, incFlag: Bool, decFlag: Bool = False)
   when(willClear || willOverflow) (cnt.clearAll())
 
 }
+
+case class AccumIncDec(bitCnt: BitCount, incFlag: Bool, decFlag: Bool, incVal: UInt, decVal: UInt) {
+
+  val accum = Reg(UInt(bitCnt)).init(0)
+  val willClear = False.allowOverride
+
+  def clearAll(): Unit = willClear := True
+
+  switch((incFlag, decFlag)) {
+    is(True, True) (accum := accum + incVal - decVal)
+    is(True, False) (accum := accum + incVal)
+    is(False, True) (accum := accum - decVal)
+    default ()
+  }
+
+  when(willClear) (accum.clearAll())
+}

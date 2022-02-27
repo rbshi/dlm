@@ -1,24 +1,13 @@
-package hwsys.coyote
+package hwsys.dlm
 
 import spinal.core._
 import spinal.lib._
 
 import hwsys.util._
 import hwsys.util.Helpers._
+import hwsys.coyote._
 
-class RdamIO extends Bundle {
-  // rd/wr cmd
-  val rd_req = slave Stream StreamData(96)
-  val wr_req = slave Stream StreamData(96)
-  val rq = slave Stream StreamData(256)
-  val sq = master Stream StreamData(256)
-
-  val axis_sink = slave Stream Axi4StreamData(512)
-  val axis_src =  master Stream Axi4StreamData(512)
-}
-
-
-case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
+case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Component with RenameIO {
 
   val io = new Bundle {
     val rdma_1 = new RdamIO
@@ -26,6 +15,12 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
     // interface user logic
     val q_sink = slave Stream Bits(512 bits)
     val q_src = master Stream Bits(512 bits)
+
+    // parsed lkReq/Resp for onFly cnt
+    // if(isMstr) {
+      val sendStatusVld, recvStatusVld = in Bool()
+      val nReq, nWrCmtReq, nRdGetReq, nResp, nWrCmtResp, nRdGetResp = in UInt(4 bits)
+    // }
 
     // input
     val en = in Bool()
@@ -84,24 +79,47 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
   when(cntBeat.willOverflow) (io.rdma_1.axis_src.tlast.set())
 
 
-
   if(isMstr){
     // mstr hw & behavior
 
-    val sendQ, recvQ = StreamFifo(Bits(512 bits), 512)
+    val sendQ = StreamFifo(Bits(512 + 13 bits), 512) // 10 bits status: nReq(4):nWrCmtReq(4):nRdGetReq(4):statusVld
+    val recvQ = StreamFifo(Bits(512 bits), 512)
 
     sendQ.flushWhen(~io.en)
     recvQ.flushWhen(~io.en)
 
     // sendQ
-    io.q_sink >> sendQ.io.push
+    sendQ.io.push.translateFrom(io.q_sink)(_ := io.nReq ## io.nWrCmtReq ## io.nRdGetReq ## io.sendStatusVld ## _)
     // have packet to send
     io.rdma_1.axis_src.translateFrom(sendQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _)
 
-    // fire sq
-    // the max net package size here is 1KB (one max send len = 1KB -> 64<<4)
-    val fireSq = ((sendQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16) && (recvQ.io.availability >= ((cntOnFly.cnt+1)<<4)) && (cntOnFly.cnt < io.nOnFly)
-    when(fireSq)(io.rdma_1.sq.valid := True)
+    val sendStatusVld = sendQ.io.pop.payload(512)
+    val nReq = sendQ.io.pop.payload(516 downto 513).asUInt
+    val nWrCmtReq = sendQ.io.pop.payload(520 downto 517).asUInt
+    val nRdGetReq = sendQ.io.pop.payload(524 downto 521).asUInt
+
+    // maybe it's unused
+    val nFlyReq = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nReq, io.nResp)
+
+    val nFlyWrCmt = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nWrCmtReq, io.nWrCmtResp)
+    val nFlyRdGet = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nRdGetReq, io.nRdGetResp)
+    //
+    val nFlyLkLine = CntIncDec(8 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld)
+
+    // fire sq criteria
+    // C1: enough data in sendQ (fifo.occupancy > 16, for 1K packet)
+    // C2: enough space in recvQ (data vol for recv: assuming all rdLkReq is granted)
+    // C3: assume all wrCmt will be in reqQ of slave
+    // C4: onFly lkReq number
+
+    val fireC1 : Bool = (sendQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16
+    val fireC2: Bool = recvQ.io.availability >= (nFlyLkLine.cnt + (nFlyRdGet.accum<<sysConf.wMaxTupLen))
+    // FIXME: 512 is the FIFO depth of reqQ
+    val fireC3: Bool = 512 >= (nFlyLkLine.cnt + (nFlyWrCmt.accum<<sysConf.wMaxTupLen))
+    val fireC4: Bool = nFlyLkLine.cnt <= 256 // 16 (1K) x 16 (packet on fly)
+    val fireSq = fireC1 && fireC2 && fireC3 && fireC4
+
+    io.rdma_1.sq.valid := fireSq
 
     // recvQ
     recvQ.io.pop >> io.q_src
@@ -125,7 +143,7 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
 
     // fire sq
     val fireSq = (respQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16 // cast to SInt for comparison
-    when(fireSq)(io.rdma_1.sq.valid := True)
+    io.rdma_1.sq.valid := fireSq
 
   }
 
