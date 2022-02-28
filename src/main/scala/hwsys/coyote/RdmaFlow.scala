@@ -6,7 +6,7 @@ import spinal.lib._
 import hwsys.util._
 import hwsys.util.Helpers._
 
-class RdamIO extends Bundle {
+class RdmaIO extends Bundle {
   // rd/wr cmd
   val rd_req = slave Stream StreamData(96)
   val wr_req = slave Stream StreamData(96)
@@ -21,7 +21,7 @@ class RdamIO extends Bundle {
 case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
 
   val io = new Bundle {
-    val rdma_1 = new RdamIO
+    val rdma_1 = new RdmaIO
 
     // interface user logic
     val q_sink = slave Stream Bits(512 bits)
@@ -44,9 +44,9 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
 
   val rdma_base = RdmaBaseT()
   rdma_base.lvaddr := 0
-  rdma_base.rvaddr := 0
+  rdma_base.rvaddr := io.flowId.resized // for rdma wr to different resource, use flowId as rvadd to identify
   rdma_base.len := io.len
-  rdma_base.params := io.flowId.resized // for rdma wr to different resource, use flowId as rvadd to identify
+  rdma_base.params := 0
 
   val sq = RdmaReqT()
   sq.opcode := 1 // write

@@ -4,8 +4,6 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.fsm._
 
-//TODO: for flow control at local node, should expose lk_batch or data_batch
-
 // local node
 class SendArbiter(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component {
   val io = new Bundle {

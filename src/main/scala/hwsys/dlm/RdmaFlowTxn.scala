@@ -10,7 +10,7 @@ import hwsys.coyote._
 case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Component with RenameIO {
 
   val io = new Bundle {
-    val rdma_1 = new RdamIO
+    val rdma_1 = new RdmaIO
 
     // interface user logic
     val q_sink = slave Stream Bits(512 bits)
@@ -56,9 +56,9 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
   // sq settings
   val rdma_base = RdmaBaseT()
   rdma_base.lvaddr := 0
-  rdma_base.rvaddr := 0
+  rdma_base.rvaddr := io.flowId.resized // for rdma wr to different resource, use flowId as rvadd to identify
   rdma_base.len := Mux(timeOut.isTimeOut, U(64), io.len)
-  rdma_base.params := io.flowId.resized // for rdma wr to different resource, use flowId as rvadd to identify
+  rdma_base.params := 0
 
   val sq = RdmaReqT()
   sq.opcode := 1 // write
