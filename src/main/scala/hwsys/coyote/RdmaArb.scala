@@ -51,6 +51,6 @@ class RdmaArb(cnt: Int) {
   val axiSinkSel = strmFifo3.io.pop.payload
   io.rdmaV(axiSinkSel).axis_sink << io.rdmaIntf.axis_sink
 
-  strmFifo3.io.pop.throwWhen(io.rdmaIntf.axis_sink.fire)
+  strmFifo3.io.pop.throwWhen(io.rdmaIntf.axis_sink.fire && io.rdmaIntf.axis_sink.tlast)
 
 }
