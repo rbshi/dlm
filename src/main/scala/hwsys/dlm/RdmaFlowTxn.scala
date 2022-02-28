@@ -26,32 +26,11 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
     val en = in Bool()
     val len = in UInt(32 bits)
     val qpn = in UInt(24 bits)
-    val nOnFly = in UInt(32 bits)
     val flowId = in UInt(8 bits)
-
-    // output
-    val cntSent = out(Reg(UInt(32 bits))).init(0)
-    val cntRecv = out(Reg(UInt(32 bits))).init(0)
 
   }
 
   io.rdma_1.rq.setBlocked()
-
-  val rdma_base = RdmaBaseT()
-  rdma_base.lvaddr := 0
-  rdma_base.rvaddr := 0
-  rdma_base.len := io.len
-  rdma_base.params := io.flowId.resized // for rdma wr to different resource, use flowId as rvadd to identify
-
-  val sq = RdmaReqT()
-  sq.opcode := 1 // write
-  sq.qpn := io.qpn
-  sq.id := 0
-  sq.host := False
-  sq.mode := False
-  sq.pkg.assignFromBits(rdma_base.asBits)
-  sq.rsrvd := 0
-  io.rdma_1.sq.data.assignFromBits(sq.asBits)
 
   // default
   io.rdma_1.sq.valid.clear()
@@ -68,15 +47,28 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
   val decCntToSend = io.rdma_1.axis_src.fire && io.rdma_1.axis_src.tlast
   val cntAxiToSend = CntIncDec(8 bits, incCntToSend, decCntToSend)
 
-  val incOnFly = io.rdma_1.sq.fire
-  val decOnFly = io.rdma_1.axis_sink.fire && io.rdma_1.axis_sink.tlast
-  val cntOnFly = CntIncDec(8 bits, incOnFly, decOnFly)
+  val timeOutInc = Bool()
+  val timeOut = pauseTimeOut(8 bits, timeOutInc, io.rdma_1.sq.fire, decCntToSend)
 
-  io.cntRecv := io.cntRecv + decOnFly.asUInt(1 bit)
-  io.cntSent := io.cntSent + decCntToSend.asUInt(1 bit)
-
-  val cntBeat = CntDynmicBound(io.len>>6, io.rdma_1.axis_src.fire) // each axi beat is with 64 B
+  val cntBeat = CntDynmicBound(Mux(timeOut.isTimeOut, U(1), io.len>>6),  io.rdma_1.axis_src.fire) // each axi beat is with 64 B
   when(cntBeat.willOverflow) (io.rdma_1.axis_src.tlast.set())
+
+  // sq settings
+  val rdma_base = RdmaBaseT()
+  rdma_base.lvaddr := 0
+  rdma_base.rvaddr := 0
+  rdma_base.len := Mux(timeOut.isTimeOut, U(64), io.len)
+  rdma_base.params := io.flowId.resized // for rdma wr to different resource, use flowId as rvadd to identify
+
+  val sq = RdmaReqT()
+  sq.opcode := 1 // write
+  sq.qpn := io.qpn
+  sq.id := 0
+  sq.host := False
+  sq.mode := False
+  sq.pkg.assignFromBits(rdma_base.asBits)
+  sq.rsrvd := 0
+  io.rdma_1.sq.data.assignFromBits(sq.asBits)
 
 
   if(isMstr){
@@ -87,6 +79,8 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
 
     sendQ.flushWhen(~io.en)
     recvQ.flushWhen(~io.en)
+
+    timeOutInc := sendQ.io.occupancy > 0
 
     // sendQ
     sendQ.io.push.translateFrom(io.q_sink)(_ := io.nReq ## io.nWrCmtReq ## io.nRdGetReq ## io.sendStatusVld ## _)
@@ -117,9 +111,9 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
     // FIXME: 512 is the FIFO depth of reqQ
     val fireC3: Bool = 512 >= (nFlyLkLine.cnt + (nFlyWrCmt.accum<<sysConf.wMaxTupLen))
     val fireC4: Bool = nFlyLkLine.cnt <= 256 // 16 (1K) x 16 (packet on fly)
-    val fireSq = fireC1 && fireC2 && fireC3 && fireC4
+    val fireSq = fireC1 && fireC2 && fireC3 && fireC4 // if timeOut, fire the sq
 
-    io.rdma_1.sq.valid := fireSq
+    io.rdma_1.sq.valid := fireSq || timeOut.isTimeOut
 
     // recvQ
     recvQ.io.pop >> io.q_src
@@ -143,16 +137,13 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
 
     // fire sq
     val fireSq = (respQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16 // cast to SInt for comparison
-    io.rdma_1.sq.valid := fireSq
+    io.rdma_1.sq.valid := fireSq || timeOut.isTimeOut
 
   }
 
   when(~io.en) {
     cntAxiToSend.clearAll()
-    cntOnFly.clearAll()
     cntBeat.clearAll()
-    io.cntSent.clearAll()
-    io.cntRecv.clearAll()
   }
 
 }

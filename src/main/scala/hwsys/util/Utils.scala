@@ -57,3 +57,22 @@ case class AccumIncDec(bitCnt: BitCount, incFlag: Bool, decFlag: Bool, incVal: U
 
   when(willClear) (accum.clearAll())
 }
+
+
+case class pauseTimeOut(bitCnt: BitCount, inc: Bool, pause: Bool, rst: Bool) {
+
+  val cnt = Counter(bitCnt)
+  val rPause = RegNextWhen(True, pause)
+
+  when(inc && ~rPause && ~cnt.willOverflow) (cnt.increment())
+  when(rst) (this.clear())
+
+  def clear(): Unit = {
+    cnt.clear()
+    rPause.clear()
+  }
+  def isTimeOut: Bool = cnt.willOverflow
+
+}
+
+
