@@ -164,7 +164,7 @@ object SimDriver {
     }
   }
 
-  implicit class StreamUtilsBundle(stream: Stream[Bundle]) {
+  implicit class StreamUtilsBundle[T <: Bundle](stream: Stream[T]) {
 
     def sendData[T1 <: BigInt](cd: ClockDomain, data: T1): Unit = {
       stream.valid #= true
@@ -216,14 +216,9 @@ object SimDriver {
 
     fork {
       while(true){
-        if(tsQ.nonEmpty) {
-          if(cycle > (tsQ.front + lat)){
-            streamOut.sendData(cd, payloadQ.dequeue())
-            tsQ.dequeue()
-          } else {
-            streamOut.simIdle()
-            cd.waitSampling()
-          }
+        if(tsQ.nonEmpty && (cycle > (tsQ.front + lat))) {
+          streamOut.sendData(cd, payloadQ.dequeue())
+          tsQ.dequeue()
         } else {
           streamOut.simIdle()
           cd.waitSampling()
@@ -242,8 +237,12 @@ object SimDriver {
                                rdReq: Seq[Stream[StreamData]], wrReq: Seq[Stream[StreamData]],
                                axiSrc: Seq[Stream[Axi4StreamData]], axiSink: Seq[Stream[Axi4StreamData]]) = {
 
+
+    //
+    def getRmt(idx: Int) = (idx+1)%2
+
     var cycle = 0
-    val sqQ, rdReqQ, wrReqQ, axiSrcQ, axiSinkQ = mutable.Queue[BigInt]()
+    val rdReqQ, wrReqQ, axiSrcCmdQ, axiSinkCmdQ, axiSrcQ, axiSinkQ, tsQ1, tsQ2 = List.fill(rdReq.length)(mutable.Queue[BigInt]())
     val lkRdReq, lkWrReq, lkAxiSrc, lkAxiSink = List.fill(rdReq.length)(Lock)
 
     val test = RdmaReqT()
@@ -257,19 +256,109 @@ object SimDriver {
       }
     }
 
+    sq.zipWithIndex.foreach{ case (q, idx) =>
+      fork {
+        while(true){
+          // get sq and enq to other Qs with transformation
+          val sqD = q.recvData(cd)
+          tsQ1(getRmt(idx)).enqueue(cycle)
+          tsQ2(getRmt(idx)).enqueue(cycle)
 
+          // transform to sq to local rd_req (for wr verb)
+          val sqPkg = genFromBigInt(RdmaBaseT(), genFromBigInt(RdmaReqT(), sqD).pkg.toBigInt)
+          val reqB = ReqT() // wr/rd shares the same ReqT
+          // FIXME: 1. write an auto trans function. 2. How about other default values?
+          reqB.vaddr #= sqPkg.rvaddr
+          reqB.len #= sqPkg.len
+          val reqVal = reqB.toBigInt()
+
+          // enq local: rdReq, axiSrcCmd. Rmt: wrReq, axiSinkCmd
+          for (enQ <- Seq(rdReqQ(idx), wrReqQ(getRmt(idx)), axiSrcCmdQ(idx), axiSinkCmdQ(getRmt(idx)))) {
+            enQ.enqueue(reqVal)
+          }
+
+        }
+      }
+    }
+
+    // send local rdReq
+    rdReqQ.zipWithIndex.foreach{ case (q, idx) =>
+      fork {
+        while(true){
+          if(q.nonEmpty){
+            // if RDMA rmt rd verb is used, queue lock should be obtained
+            // lkRdReq(idx).get()
+            rdReq(idx).sendData(cd, q.dequeue())
+            // lkRdReq(idx).rlse()
+          } else {
+            rdReq(idx).simIdle()
+            cd.waitSampling()
+          }
+        }
+      }
+    }
+
+    // recv local axi_src
+    axiSrcCmdQ.zipWithIndex.foreach { case (q, idx) =>
+      fork {
+        while(true){
+          if(q.nonEmpty){
+            // recvData the fragment from axiSrcQ and send to target node axiSinkQ
+            var fragEnd = false
+            do {
+              val axiSrcVal = axiSrc(idx).recvData(cd)
+              axiSinkQ(getRmt(idx)).enqueue(axiSrcVal)
+              fragEnd = genFromBigInt(Axi4StreamData(512), axiSrcVal).tlast.toBoolean
+            } while (!fragEnd)
+            q.dequeue() // cmdQ
+          } else {
+            axiSrc(idx).setBlocked()
+            cd.waitSampling()
+          }
+        }
+      }
+    }
+
+    // send remote wrReq
+    wrReqQ.zipWithIndex.foreach { case (q, idx) =>
+      fork {
+        while(true){
+          if(q.nonEmpty && (cycle > tsQ1(idx).front + lat)){
+            wrReq(idx).sendData(cd, q.dequeue())
+            tsQ1(idx).dequeue()
+          } else {
+            wrReq(idx).simIdle()
+            cd.waitSampling()
+          }
+        }
+      }
+    }
+
+    // send remote axiSink (FIXME: perhaps we need a token from wrReq?)
+    axiSinkCmdQ.zipWithIndex.foreach { case (q, idx) =>
+      fork {
+        while(true){
+          if(q.nonEmpty && (cycle > tsQ2(idx).front + lat)){
+            // sendData the fragment from axiSinkQ and send to target node axiSinkQ
+            var fragEnd = false
+            do {
+              val axiSinkVal = axiSinkQ(idx).dequeue()
+              fragEnd = genFromBigInt(Axi4StreamData(512), axiSinkVal).tlast.toBoolean
+              axiSink(idx).sendData(cd, axiSinkVal)
+            } while (!fragEnd)
+            q.dequeue() // cmdQ
+            tsQ2(idx).dequeue()
+          } else {
+            axiSink(idx).simIdle()
+            cd.waitSampling()
+          }
+        }
+      }
+    }
 
   }
 
-
 }
-
-
-
-
-
-
-
 
 
 
@@ -278,6 +367,12 @@ object SimHelpers {
 
   def bigIntTruncVal(value: BigInt, hi: Int, lo: Int): BigInt = {
     (value >> lo) & ((1<<(hi+1))-1)
+  }
+
+  def genFromBigInt[T <: Bundle](gen: T, value: BigInt): T = {
+    val bd = gen
+    bd.assignFromBigInt(value)
+    bd
   }
 
   implicit class BundleUtils(bd: Bundle) {
