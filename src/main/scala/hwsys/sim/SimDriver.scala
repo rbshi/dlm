@@ -10,6 +10,24 @@ import scala.collection.mutable
 import scala.collection._
 import scala.math.BigInt
 
+import hwsys.coyote._
+import hwsys.sim.SimHelpers._
+
+
+import scala.concurrent.stm._
+
+
+/** atomic lock */
+object Lock{
+  private val lkStatus = Ref(false)
+  def get(waitF: Unit): Unit = atomic { implicit txn =>
+    while(lkStatus()){waitF} // wait function as the argument; for here, it's cd.waitSampling()
+    lkStatus() = true
+  }
+  def rlse(): Unit = atomic {
+    implicit txn => lkStatus() = false
+  }
+}
 
 /** Types in sim */
 trait MemStructSim {
@@ -119,8 +137,8 @@ object SimDriver {
     }
   }
 
-  // TODO: how to constraint the type scope for specific method in the class? Then I can combine these above.
-  implicit class StreamUtilsBits[T <: Bits](stream: Stream[T]) {
+  // TODO: how to constraint the type scope for specific method in the class? Then I can combine these above and below.
+  implicit class StreamUtilsBitVector[T <: BitVector](stream: Stream[T] ) {
     
     def sendData[T1 <: BigInt](cd: ClockDomain, data: T1): Unit = {
       stream.valid #= true
@@ -145,10 +163,35 @@ object SimDriver {
       that <<# stream
     }
   }
-  
+
+  implicit class StreamUtilsBundle(stream: Stream[Bundle]) {
+
+    def sendData[T1 <: BigInt](cd: ClockDomain, data: T1): Unit = {
+      stream.valid #= true
+      stream.payload #= data
+      cd.waitSamplingWhere(stream.ready.toBoolean)
+      stream.valid #= false
+    }
+
+    def recvData(cd: ClockDomain): BigInt = {
+      stream.ready #= true
+      cd.waitSamplingWhere(stream.valid.toBoolean)
+      stream.payload.toBigInt()
+    }
+
+    def <<#(that: Stream[Bundle]): Unit = {
+      stream.payload #= that.payload.toBigInt()
+      stream.valid #= that.valid.toBoolean
+      that.ready #= stream.ready.toBoolean
+    }
+
+    def #>>(that: Stream[Bundle]) = {
+      that <<# stream
+    }
+  }
+
 
   /** Pipe stream in sim with given latency
-   * Stream[T] is hardware may not be used in sim env
    */
   def streamDelayPipe[T <: Bits](cd: ClockDomain, streamIn: Stream[T], streamOut: Stream[T], lat: Int) = {
 
@@ -189,33 +232,117 @@ object SimDriver {
     }
 
   }
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
 
-  
+
+  /** RDMA switch for sim
+   * Support WR verb only now
+   * rq is not used
+   */
+  def rdmaDelayPipe(cd: ClockDomain, n: Int, lat: Int, sq: Seq[Stream[StreamData]],
+                               rdReq: Seq[Stream[StreamData]], wrReq: Seq[Stream[StreamData]],
+                               axiSrc: Seq[Stream[Axi4StreamData]], axiSink: Seq[Stream[Axi4StreamData]]) = {
+
+    var cycle = 0
+    val sqQ, rdReqQ, wrReqQ, axiSrcQ, axiSinkQ = mutable.Queue[BigInt]()
+    val lkRdReq, lkWrReq, lkAxiSrc, lkAxiSink = List.fill(rdReq.length)(Lock)
+
+    val test = RdmaReqT()
+    test.assignFromBits(sq.head.data)
+
+    // clk counter
+    fork {
+      while(true){
+        cd.waitSampling()
+        cycle += 1
+      }
+    }
+
+
+
+  }
+
 
 }
+
+
+
+
+
+
+
+
+
+
+/** SimHelpers */
+object SimHelpers {
+
+  def bigIntTruncVal(value: BigInt, hi: Int, lo: Int): BigInt = {
+    (value >> lo) & ((1<<(hi+1))-1)
+  }
+
+  implicit class BundleUtils(bd: Bundle) {
+
+    /** AutoConnect the bundle with an other bundle by name */
+    def connectAllByName(that: Bundle): Unit = {
+      for ((name, element) <- bd.elements) {
+        val other = that.find(name)
+        if (other == null)
+          LocatedPendingError(s"Bundle assignment is not complete. Missing $name")
+        else
+          element <> other // NOTE: no recursive is required -> bundle has autoConnect
+      }
+    }
+
+    /** AutoConnect all possible signal fo the bundle with an other bundle by name */
+    def connectSomeByName(that: Bundle): Unit = {
+      for ((name, element) <- bd.elements) {
+        val other = that.find(name)
+        if (other != null)
+          element <> other
+      }
+    }
+
+  }
+
+
+  implicit class SimBundlePimper(bd: Bundle) {
+
+    def assignFromBigInt(value: BigInt): Unit = {
+      var offset = 0
+      for ((_, e) <- bd.elements) {
+        val truncVal = bigIntTruncVal(value, offset, offset + e.getBitsWidth - 1)
+        e match {
+          case e: Bundle => e.assignFromBigInt(truncVal)
+          case e: BaseType => setBigInt(e, truncVal)
+        }
+        offset += e.getBitsWidth
+      }
+    }
+
+    def toBigInt(startOffs: Int = 0, startVal: BigInt = 0): BigInt = {
+      var offset = startOffs
+      var value = startVal
+
+      for ((_, e) <- bd.elements) {
+        e match {
+          case e: Bundle => value += e.toBigInt(offset, value)
+          case e: BaseType => value += (e.toBigInt << offset)
+        }
+        offset += e.getBitsWidth
+      }
+      value
+    }
+
+    def #=(value: BigInt) = bd.assignFromBigInt(value)
+    def #=(value: Long) = bd.assignFromBigInt(value.toBigInt)
+    def #=(value: Int) = bd.assignFromBigInt(value.toBigInt)
+
+  }
+
+}
+
+
+
+
+
+

@@ -9,6 +9,7 @@ object dlm extends SbtModule {
     ivy"com.github.spinalhdl::spinalhdl-core:$spinalVersion",
     ivy"com.github.spinalhdl::spinalhdl-lib:$spinalVersion",
     ivy"com.lihaoyi::os-lib:0.8.0"
+    // ivy"org.scala-stm::scala-stm:0.7"
   )
   def scalacPluginIvyDeps = Agg(ivy"com.github.spinalhdl::spinalhdl-idsl-plugin:$spinalVersion")
 
