@@ -12,9 +12,9 @@ case class CntIncDec(bitCnt: BitCount, incFlag: Bool, decFlag: Bool) {
 
   def clearAll(): Unit = willClear := True
 
-  switch((incFlag, decFlag)) {
-    is(True, False) (cnt := cnt + 1)
-    is(False, True) (cnt := cnt -1)
+  switch(incFlag ## decFlag) {
+    is(True ## False) (cnt := cnt + 1)
+    is(False ## True) (cnt := cnt -1)
     default ()
   }
 
@@ -31,9 +31,9 @@ case class CntDynmicBound(upBoundEx: UInt, incFlag: Bool, decFlag: Bool = False)
 
   def clearAll(): Unit = willClear := True
 
-  switch((incFlag, decFlag)) {
-    is(True, False) (cnt := cnt + 1)
-    is(False, True) (cnt := cnt -1)
+  switch(incFlag ## decFlag) {
+    is(True ## False) (cnt := cnt + 1)
+    is(False ## True) (cnt := cnt -1)
     default ()
   }
 
@@ -48,10 +48,10 @@ case class AccumIncDec(bitCnt: BitCount, incFlag: Bool, decFlag: Bool, incVal: U
 
   def clearAll(): Unit = willClear := True
 
-  switch((incFlag, decFlag)) {
-    is(True, True) (accum := accum + incVal - decVal)
-    is(True, False) (accum := accum + incVal)
-    is(False, True) (accum := accum - decVal)
+  switch(incFlag ## decFlag) {
+    is(True ## True) (accum := accum + incVal - decVal)
+    is(True ## False) (accum := accum + incVal)
+    is(False ## True) (accum := accum - decVal)
     default ()
   }
 
@@ -64,14 +64,16 @@ case class pauseTimeOut(bitCnt: BitCount, inc: Bool, pause: Bool, rst: Bool) {
   val cnt = Counter(bitCnt)
   val rPause = RegNextWhen(True, pause)
 
-  when(inc && ~rPause && ~cnt.willOverflow) (cnt.increment())
+  when(inc && ~rPause && ~cnt.willOverflowIfInc) (cnt.increment())
   when(rst) (this.clear())
 
   def clear(): Unit = {
     cnt.clear()
     rPause.clear()
   }
-  def isTimeOut: Bool = cnt.willOverflow
+
+  // hold til rst
+  def isTimeOut: Bool = cnt.willOverflowIfInc
 
 }
 

@@ -37,8 +37,6 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
   io.rdma.rq.setBlocked()
 
   // default
-  io.rdma.sq.valid.clear()
-  io.rdma.axis_src.valid.clear()
   io.rdma.axis_src.tlast.clear()
   io.rdma.axis_src.tkeep.setAll()
 
@@ -89,7 +87,8 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
     // sendQ
     sendQ.io.push.translateFrom(io.q_sink)(_ := io.nReq ## io.nWrCmtReq ## io.nRdGetReq ## io.sendStatusVld ## _)
     // have packet to send
-    io.rdma.axis_src.translateFrom(sendQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _)
+    // NOTE: truncate the MSBs used for flow control
+    io.rdma.axis_src.translateFrom(sendQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _.resized)
 
     val sendStatusVld = sendQ.io.pop.payload(512)
     val nReq = sendQ.io.pop.payload(516 downto 513).asUInt
@@ -97,7 +96,7 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
     val nRdGetReq = sendQ.io.pop.payload(524 downto 521).asUInt
 
     // maybe it's unused
-    val nFlyReq = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nReq, io.nResp)
+    // val nFlyReq = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nReq, io.nResp)
 
     val nFlyWrCmt = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nWrCmtReq, io.nWrCmtResp)
     val nFlyRdGet = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nRdGetReq, io.nRdGetResp)
@@ -126,6 +125,7 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
   } else {
     // slave hw & behavior (no onfly control)
 
+
     val reqQ, respQ = StreamFifo(Bits(512 bits), 512)
     reqQ.flushWhen(~io.ctrl.en)
     respQ.flushWhen(~io.ctrl.en)
@@ -141,6 +141,8 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
 
     // fire sq
     val fireSq = (respQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16 // cast to SInt for comparison
+
+    timeOutInc := respQ.io.occupancy > 0
     io.rdma.sq.valid := fireSq || timeOut.isTimeOut
 
   }

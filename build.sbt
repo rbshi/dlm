@@ -13,7 +13,7 @@ lazy val dlm = (project in file("."))
     libraryDependencies ++= Seq(spinalCore, spinalLib, spinalIdslPlugin),
     libraryDependencies += "com.lihaoyi" %% "utest" % "0.7.10" % "test",
     libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.8.0",
-    libraryDependencies += "org.scala-stm" %% "scala-stm" % "0.7",
+    libraryDependencies += "org.scala-stm" %% "scala-stm" % "0.11.0",
     testFrameworks += new TestFramework("utest.runner.Framework")
   )
 

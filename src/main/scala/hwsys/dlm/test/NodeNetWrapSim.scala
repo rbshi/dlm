@@ -13,7 +13,7 @@ class TwoNodeNetTop(implicit sysConf: SysConfig) extends Component {
   (n, io).zipped.foreach(_.io.connectAllByName(_))
 }
 
-object NodeWrapSim {
+object NodeNetWrapSim {
 
   def main(args: Array[String]): Unit = {
 

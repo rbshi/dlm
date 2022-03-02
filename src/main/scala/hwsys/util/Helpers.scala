@@ -56,6 +56,13 @@ object Helpers {
       }
     }
 
+    def flipDir(): Unit = {
+      if(stream.isMasterInterface)
+        stream.asSlave()
+      else
+        stream.asMaster()
+    }
+
   }
 
 

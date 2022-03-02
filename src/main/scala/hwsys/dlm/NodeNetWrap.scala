@@ -33,8 +33,8 @@ class NodeNetWrap(implicit sysConf: SysConfig) extends Component {
   // connect flow
   nodeFlow.io.sendQ >> rdmaFlowMstr.io.q_sink
   nodeFlow.io.recvQ << rdmaFlowMstr.io.q_src
-  nodeFlow.io.reqQ << rdmaFlowMstr.io.q_src
-  nodeFlow.io.respQ >> rdmaFlowMstr.io.q_sink
+  nodeFlow.io.reqQ << rdmaFlowSlve.io.q_src
+  nodeFlow.io.respQ >> rdmaFlowSlve.io.q_sink
 
   val rdmaArb = new RdmaArb(2) // 2 nodes
   rdmaFlowMstr.io.rdma <> rdmaArb.io.rdmaV(0)

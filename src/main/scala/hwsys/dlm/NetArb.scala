@@ -45,12 +45,13 @@ class SendArbiter(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component
 
     io.sendQ << lkReqJoin.continueWhen(isActive(LKREQ)) // why must have isActive??
 
-    LKREQ.whenIsActive{
+    // status parse
+    io.statusVld := isActive(LKREQ)
+    io.nReq := U(cntTxnMan).resized
+    io.nWrCmtReq := CountOne(mskWr).resized
+    io.nRdGetReq := CountOne(mskRdGet).resized
 
-      io.statusVld := True
-      io.nReq := cntTxnMan
-      io.nWrCmtReq := CountOne(mskWr)
-      io.nRdGetReq := CountOne(mskRdGet)
+    LKREQ.whenIsActive{
 
       when(io.sendQ.fire){
         rMskWr := mskWr
@@ -92,8 +93,8 @@ class RecvDispatcher(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Compon
     val rdDataV = Vec(master Stream Bits(512 bits), cntTxnMan)
 
     // status
-    val statusVld = Bool().default(False)
-    val nResp, nWrCmtResp, nRdGetResp = UInt(4 bits).default(0)
+    val statusVld = out(Bool()).default(False)
+    val nResp, nWrCmtResp, nRdGetResp = out(UInt(4 bits)).default(0)
   }
 
   val cntBeat = Reg(UInt(8 bits)).init(0)
@@ -124,13 +125,13 @@ class RecvDispatcher(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Compon
     io.lkRespV.map(_.setIdle())
     io.rdDataV.map(_.setIdle())
 
+    // status parse
+    io.statusVld := isActive(LKRESP)
+    io.nResp := U(cntTxnMan).resized
+    io.nWrCmtResp := CountOne(mskWrCmt).resized
+    io.nRdGetResp := CountOne(mskRd).resized
+
     LKRESP.whenIsActive {
-
-      io.statusVld := True
-      io.nResp := cntTxnMan
-      io.nWrCmtResp := CountOne(mskWrCmt)
-      io.nRdGetResp := CountOne(mskRd)
-
       when(io.recvQ.fire) {
         rMskRd := mskRd
         // cast to LkResp entry

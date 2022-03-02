@@ -15,6 +15,16 @@ class RdmaIO extends Bundle {
 
   val axis_sink = slave Stream Axi4StreamData(512)
   val axis_src =  master Stream Axi4StreamData(512)
+
+  def flipDir(): Unit = {
+    rd_req.flipDir()
+    wr_req.flipDir()
+    rq.flipDir()
+    sq.flipDir()
+    axis_sink.flipDir()
+    axis_src.flipDir()
+  }
+
 }
 
 
