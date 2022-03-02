@@ -10,7 +10,7 @@ import hwsys.coyote._
 case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Component with RenameIO {
 
   val io = new Bundle {
-    val rdma_1 = new RdmaIO
+    val rdma = new RdmaIO
 
     // interface user logic
     val q_sink = slave Stream Bits(512 bits)
@@ -30,28 +30,28 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
 
   }
 
-  io.rdma_1.rq.setBlocked()
+  io.rdma.rq.setBlocked()
 
   // default
-  io.rdma_1.sq.valid.clear()
-  io.rdma_1.axis_src.valid.clear()
-  io.rdma_1.axis_src.tlast.clear()
-  io.rdma_1.axis_src.tkeep.setAll()
+  io.rdma.sq.valid.clear()
+  io.rdma.axis_src.valid.clear()
+  io.rdma.axis_src.tlast.clear()
+  io.rdma.axis_src.tkeep.setAll()
 
   // ready of rd/wr req
-  io.rdma_1.rd_req.ready.set()
-  io.rdma_1.wr_req.ready.set()
+  io.rdma.rd_req.ready.set()
+  io.rdma.wr_req.ready.set()
 
-  // val incCntToSend = io.rdma_1.rd_req.fire // should NOT use rd_req to trigger the incCntToSend, it has a delay to the sq.fire, and will underflow to fireSq criteria to minus ??
-  val incCntToSend = io.rdma_1.sq.fire
-  val decCntToSend = io.rdma_1.axis_src.fire && io.rdma_1.axis_src.tlast
+  // val incCntToSend = io.rdma.rd_req.fire // should NOT use rd_req to trigger the incCntToSend, it has a delay to the sq.fire, and will underflow to fireSq criteria to minus ??
+  val incCntToSend = io.rdma.sq.fire
+  val decCntToSend = io.rdma.axis_src.fire && io.rdma.axis_src.tlast
   val cntAxiToSend = CntIncDec(8 bits, incCntToSend, decCntToSend)
 
   val timeOutInc = Bool()
-  val timeOut = pauseTimeOut(8 bits, timeOutInc, io.rdma_1.sq.fire, decCntToSend)
+  val timeOut = pauseTimeOut(8 bits, timeOutInc, io.rdma.sq.fire, decCntToSend)
 
-  val cntBeat = CntDynmicBound(Mux(timeOut.isTimeOut, U(1), io.len>>6),  io.rdma_1.axis_src.fire) // each axi beat is with 64 B
-  when(cntBeat.willOverflow) (io.rdma_1.axis_src.tlast.set())
+  val cntBeat = CntDynmicBound(Mux(timeOut.isTimeOut, U(1), io.len>>6),  io.rdma.axis_src.fire) // each axi beat is with 64 B
+  when(cntBeat.willOverflow) (io.rdma.axis_src.tlast.set())
 
   // sq settings
   val rdma_base = RdmaBaseT()
@@ -68,7 +68,7 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
   sq.mode := False
   sq.pkg.assignFromBits(rdma_base.asBits)
   sq.rsrvd := 0
-  io.rdma_1.sq.data.assignFromBits(sq.asBits)
+  io.rdma.sq.data.assignFromBits(sq.asBits)
 
 
   if(isMstr){
@@ -85,7 +85,7 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
     // sendQ
     sendQ.io.push.translateFrom(io.q_sink)(_ := io.nReq ## io.nWrCmtReq ## io.nRdGetReq ## io.sendStatusVld ## _)
     // have packet to send
-    io.rdma_1.axis_src.translateFrom(sendQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _)
+    io.rdma.axis_src.translateFrom(sendQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _)
 
     val sendStatusVld = sendQ.io.pop.payload(512)
     val nReq = sendQ.io.pop.payload(516 downto 513).asUInt
@@ -113,11 +113,11 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
     val fireC4: Bool = nFlyLkLine.cnt <= 256 // 16 (1K) x 16 (packet on fly)
     val fireSq = fireC1 && fireC2 && fireC3 && fireC4 // if timeOut, fire the sq
 
-    io.rdma_1.sq.valid := fireSq || timeOut.isTimeOut
+    io.rdma.sq.valid := fireSq || timeOut.isTimeOut
 
     // recvQ
     recvQ.io.pop >> io.q_src
-    recvQ.io.push.translateFrom(io.rdma_1.axis_sink)(_ := _.tdata)
+    recvQ.io.push.translateFrom(io.rdma.axis_sink)(_ := _.tdata)
 
   } else {
     // slave hw & behavior (no onfly control)
@@ -128,16 +128,16 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
 
     // reqQ
     reqQ.io.pop >> io.q_src
-    reqQ.io.push.translateFrom(io.rdma_1.axis_sink)(_ := _.tdata)
+    reqQ.io.push.translateFrom(io.rdma.axis_sink)(_ := _.tdata)
 
     // respQ
     io.q_sink >> respQ.io.push
     // have packet to send
-    io.rdma_1.axis_src.translateFrom(respQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _)
+    io.rdma.axis_src.translateFrom(respQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _)
 
     // fire sq
     val fireSq = (respQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16 // cast to SInt for comparison
-    io.rdma_1.sq.valid := fireSq || timeOut.isTimeOut
+    io.rdma.sq.valid := fireSq || timeOut.isTimeOut
 
   }
 
