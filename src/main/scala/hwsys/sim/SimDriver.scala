@@ -233,7 +233,7 @@ object SimDriver {
    * Support WR verb only now
    * rq is not used
    */
-  def rdmaDelayPipe(cd: ClockDomain, n: Int, lat: Int, sq: Seq[Stream[StreamData]],
+  def rdmaSwitch(cd: ClockDomain, n: Int, lat: Int, sq: Seq[Stream[StreamData]],
                                rdReq: Seq[Stream[StreamData]], wrReq: Seq[Stream[StreamData]],
                                axiSrc: Seq[Stream[Axi4StreamData]], axiSink: Seq[Stream[Axi4StreamData]]) = {
 

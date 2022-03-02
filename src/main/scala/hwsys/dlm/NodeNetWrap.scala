@@ -11,7 +11,7 @@ import hwsys.util.Helpers._
 class NodeNetIO(implicit sysConf: SysConfig) extends Bundle{
   val node = new NodeIO()
   val rdma = new RdmaIO
-  val rdmaCtrl = new RdmaCtrlIO
+  val rdmaCtrl = Array.fill(2)(new RdmaCtrlIO)
 }
 
 class NodeNetWrap(implicit sysConf: SysConfig) extends Component {
@@ -25,8 +25,9 @@ class NodeNetWrap(implicit sysConf: SysConfig) extends Component {
   val rdmaFlowMstr = new RdmaFlowTxn(isMstr = true)
   val rdmaFlowSlve = new RdmaFlowTxn(isMstr = false)
   // connect rdma ctrl
-  rdmaFlowMstr.io.ctrl <> io.rdmaCtrl
-  rdmaFlowSlve.io.ctrl <> io.rdmaCtrl
+  rdmaFlowMstr.io.ctrl <> io.rdmaCtrl(0)
+  rdmaFlowSlve.io.ctrl <> io.rdmaCtrl(1)
+
   // connect net status
   nodeFlow.io.connectSomeByName(rdmaFlowMstr.io)
   // connect flow
