@@ -8,7 +8,7 @@ import hwsys.util.Helpers._
 
 
 class TwoNodeTop(implicit sysConf: SysConfig) extends Component {
-  val io = Array.fill(2)(new NodeIO())
+  val io = Array.fill(2)(new NodeFlowIO())
   val n0, n1 = new NodeWrap()
   Seq(n0, n1).zipWithIndex.foreach { case(n, idx) =>
     n.io.connectAllByName(io(idx))

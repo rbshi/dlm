@@ -7,7 +7,14 @@ import hwsys.util._
 import hwsys.util.Helpers._
 import hwsys.coyote._
 
-case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Component with RenameIO {
+class RdmaCtrlIO extends Bundle {
+  val en = in Bool()
+  val len = in UInt(32 bits)
+  val qpn = in UInt(24 bits)
+  val flowId = in UInt(8 bits)
+}
+
+class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Component with RenameIO {
 
   val io = new Bundle {
     val rdma = new RdmaIO
@@ -22,11 +29,8 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
       val nReq, nWrCmtReq, nRdGetReq, nResp, nWrCmtResp, nRdGetResp = in UInt(4 bits)
     // }
 
-    // input
-    val en = in Bool()
-    val len = in UInt(32 bits)
-    val qpn = in UInt(24 bits)
-    val flowId = in UInt(8 bits)
+    // ctrl
+    val ctrl = new RdmaCtrlIO
 
   }
 
@@ -50,19 +54,19 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
   val timeOutInc = Bool()
   val timeOut = pauseTimeOut(8 bits, timeOutInc, io.rdma.sq.fire, decCntToSend)
 
-  val cntBeat = CntDynmicBound(Mux(timeOut.isTimeOut, U(1), io.len>>6),  io.rdma.axis_src.fire) // each axi beat is with 64 B
+  val cntBeat = CntDynmicBound(Mux(timeOut.isTimeOut, U(1), io.ctrl.len>>6),  io.rdma.axis_src.fire) // each axi beat is with 64 B
   when(cntBeat.willOverflow) (io.rdma.axis_src.tlast.set())
 
   // sq settings
   val rdma_base = RdmaBaseT()
   rdma_base.lvaddr := 0
-  rdma_base.rvaddr := io.flowId.resized // for rdma wr to different resource, use flowId as rvadd to identify
-  rdma_base.len := Mux(timeOut.isTimeOut, U(64), io.len)
+  rdma_base.rvaddr := io.ctrl.flowId.resized // for rdma wr to different resource, use flowId as rvadd to identify
+  rdma_base.len := Mux(timeOut.isTimeOut, U(64), io.ctrl.len)
   rdma_base.params := 0
 
   val sq = RdmaReqT()
   sq.opcode := 1 // write
-  sq.qpn := io.qpn
+  sq.qpn := io.ctrl.qpn
   sq.id := 0
   sq.host := False
   sq.mode := False
@@ -77,8 +81,8 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
     val sendQ = StreamFifo(Bits(512 + 13 bits), 512) // 10 bits status: nReq(4):nWrCmtReq(4):nRdGetReq(4):statusVld
     val recvQ = StreamFifo(Bits(512 bits), 512)
 
-    sendQ.flushWhen(~io.en)
-    recvQ.flushWhen(~io.en)
+    sendQ.flushWhen(~io.ctrl.en)
+    recvQ.flushWhen(~io.ctrl.en)
 
     timeOutInc := sendQ.io.occupancy > 0
 
@@ -123,8 +127,8 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
     // slave hw & behavior (no onfly control)
 
     val reqQ, respQ = StreamFifo(Bits(512 bits), 512)
-    reqQ.flushWhen(~io.en)
-    respQ.flushWhen(~io.en)
+    reqQ.flushWhen(~io.ctrl.en)
+    respQ.flushWhen(~io.ctrl.en)
 
     // reqQ
     reqQ.io.pop >> io.q_src
@@ -141,7 +145,7 @@ case class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Co
 
   }
 
-  when(~io.en) {
+  when(~io.ctrl.en) {
     cntAxiToSend.clearAll()
     cntBeat.clearAll()
   }

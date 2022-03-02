@@ -5,27 +5,34 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi.Axi4
 
 class NodeIO(implicit sysConf: SysConfig) extends Bundle {
-  val nodeId = in UInt(sysConf.wNId bits)
   val axi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan + sysConf.nNode -1)
   val cmdAxi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan)
-  val start = in Bool()
+
+  val nodeId = in UInt(sysConf.wNId bits)
   val txnNumTotal = in UInt(32 bits)
   val cmdAddrOffs = in Vec(UInt(32 bits), sysConf.nTxnMan) //NOTE: unit size 64B
+  val start = in Bool()
 
   val done = out Vec(Bool(), sysConf.nTxnMan)
   val cntTxnCmt, cntTxnAbt, cntTxnLd = out Vec(UInt(32 bits), sysConf.nTxnMan)
   val cntClk = out Vec(UInt(40 bits), sysConf.nTxnMan)
+}
 
-  // network
+// Node + Q IO
+class NodeFlowIO(implicit sysConf: SysConfig) extends NodeIO {
+  // network flow IO
   val sendQ = master Stream Bits(512 bits)
   val respQ = master Stream Bits(512 bits)
   val reqQ = slave Stream Bits(512 bits)
   val recvQ = slave Stream Bits(512 bits)
+  // network arb status
+  val sendStatusVld, recvStatusVld = out Bool()
+  val nReq, nWrCmtReq, nRdGetReq, nResp, nWrCmtResp, nRdGetResp = out UInt(4 bits)
 }
 
 class NodeWrap(implicit sysConf: SysConfig) extends Component {
 
-  val io = new NodeIO()
+  val io = new NodeFlowIO()
 
   val txnManAry = Array.fill(sysConf.nTxnMan)(new TxnManCS(sysConf))
   val ltMCh = new LtTop(sysConf)
@@ -68,6 +75,18 @@ class NodeWrap(implicit sysConf: SysConfig) extends Component {
   recvDisp.io.recvQ <> io.recvQ
   reqDisp.io.reqQ <> io.reqQ
   respArb.io.respQ <> io.respQ
+
+  // status for rdma flow control
+  sendArb.io.statusVld <> io.sendStatusVld
+  sendArb.io.nReq <> io.nReq
+  sendArb.io.nWrCmtReq <> io.nWrCmtReq
+  sendArb.io.nRdGetReq <> io.nRdGetReq
+
+  recvDisp.io.statusVld <> io.recvStatusVld
+  recvDisp.io.nResp <> io.nResp
+  recvDisp.io.nWrCmtResp <> io.nWrCmtResp
+  recvDisp.io.nRdGetResp <> io.nRdGetResp
+
 
   (sendArb.io.lkReqV, txnManAry).zipped.foreach(_ <> _.io.lkReqRmt)
   (sendArb.io.wrDataV, txnManAry).zipped.foreach(_ <> _.io.wrRmt)

@@ -72,7 +72,7 @@ object Helpers {
       }
     }
 
-    /** AutoConnect all possible signal fo the bundle with an other bundle by name */
+    /** AutoConnect all possible signal of the bundle with an other bundle by name */
     def connectSomeByName(that: Bundle): Unit = {
       for ((name, element) <- bd.elements) {
         val other = that.find(name)
