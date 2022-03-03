@@ -260,18 +260,23 @@ object SimDriver {
           tsQ1(getRmt(idx)).enqueue(cycle)
           tsQ2(getRmt(idx)).enqueue(cycle)
 
-          // transform to sq to local rd_req (for wr verb)
-          val sqPkg = genFromBigInt(RdmaBaseT(), genFromBigInt(RdmaReqT(), sqD).pkg.toBigInt)
-          val reqB = ReqT() // wr/rd shares the same ReqT
-          // FIXME: 1. write an auto trans function. 2. How about other default values?
-          reqB.vaddr #= sqPkg.rvaddr.toBigInt
-          reqB.len #= sqPkg.len.toBigInt
-          val reqVal = reqB.toBigInt()
+          // transform to sq to local rd_req (for wr verb), does NOT work due to simPublic
+          // val sqPkg = genFromBigInt(RdmaBaseT(), genFromBigInt(RdmaReqT(), sqD).pkg.toBigInt)
+          // val reqB = ReqT() // wr/rd shares the same ReqT
+          // // FIXME: 1. write an auto trans function. 2. How about other default values?
+          // reqB.vaddr #= sqPkg.rvaddr.toBigInt
+          // reqB.len #= sqPkg.len.toBigInt
+          // val reqVal = reqB.toBigInt()
+
+          // FIXME: manually set the req.pkg.raddr (127:80) req.pkg.len (160:128) to reqT (vaddr@95:48, len@47:20)
+          val reqVal = (bigIntTruncVal(sqD, 80, 127) << 48) + (bigIntTruncVal(sqD, 128, 159) << 20)
 
           // enq local: rdReq, axiSrcCmd. Rmt: wrReq, axiSinkCmd
           for (enQ <- Seq(rdReqQ(idx), wrReqQ(getRmt(idx)), axiSrcCmdQ(idx), axiSinkCmdQ(getRmt(idx)))) {
             enQ.enqueue(reqVal)
           }
+
+          println(s"[sqCmd] enq ${reqVal.hexString()}")
 
         }
       }
@@ -304,7 +309,9 @@ object SimDriver {
             do {
               val axiSrcVal = axiSrc(idx).recvData(cd)
               axiSinkQ(getRmt(idx)).enqueue(axiSrcVal)
-              fragEnd = genFromBigInt(Axi4StreamData(512), axiSrcVal).tlast.toBoolean
+              // fragEnd = genFromBigInt(Axi4StreamData(512), axiSrcVal).tlast.toBoolean
+              fragEnd = ((axiSrcVal >> (512+64)) & BigInt(1)) == 1
+              println(s"[axiSinkQ] enq ${axiSrcVal.hexString()}")
             } while (!fragEnd)
             q.dequeue() // cmdQ
           } else {
@@ -320,7 +327,9 @@ object SimDriver {
       fork {
         while(true){
           if(q.nonEmpty && (cycle > tsQ1(idx).front + lat)){
-            wrReq(idx).sendData(cd, q.dequeue())
+            val reqVal = q.dequeue()
+            println(s"[wrReq] deq ${reqVal.hexString()}")
+            wrReq(idx).sendData(cd, reqVal)
             tsQ1(idx).dequeue()
           } else {
             wrReq(idx).simIdle()
@@ -334,13 +343,16 @@ object SimDriver {
     axiSinkCmdQ.zipWithIndex.foreach { case (q, idx) =>
       fork {
         while(true){
-          if(q.nonEmpty && (cycle > tsQ2(idx).front + lat)){
+          // axiSinkQ will be ready later than q
+          if(q.nonEmpty && (cycle > tsQ2(idx).front + lat) && axiSinkQ(idx).nonEmpty){
             // sendData the fragment from axiSinkQ and send to target node axiSinkQ
             var fragEnd = false
             do {
               val axiSinkVal = axiSinkQ(idx).dequeue()
-              fragEnd = genFromBigInt(Axi4StreamData(512), axiSinkVal).tlast.toBoolean
+              // fragEnd = genFromBigInt(Axi4StreamData(512), axiSinkVal).tlast.toBoolean
+              fragEnd = ((axiSinkVal >> (512+64)) & BigInt(1)) == 1
               axiSink(idx).sendData(cd, axiSinkVal)
+              println(s"[axiSinkQ] deq ${axiSinkVal.hexString()}")
             } while (!fragEnd)
             q.dequeue() // cmdQ
             tsQ2(idx).dequeue()

@@ -1,6 +1,7 @@
 package hwsys.sim
 
 import spinal.core._
+import spinal.lib._
 import spinal.core.sim._
 
 import scala.math.BigInt
@@ -9,10 +10,11 @@ import scala.math.BigInt
 /** SimHelpers */
 object SimHelpers {
 
-  def bigIntTruncVal(value: BigInt, hi: Int, lo: Int): BigInt = {
-    (value >> lo) & ((1<<(hi+1))-1)
+  def bigIntTruncVal(value: BigInt, lo: Int, hi: Int): BigInt = {
+    (value >> lo) & (BigInt(1)<<(hi-lo+1))-1
   }
 
+  @deprecated
   def genFromBigInt[T <: Bundle](gen: T, value: BigInt): T = {
     val bd = gen
     bd.assignFromBigInt(value)
@@ -53,7 +55,6 @@ object SimHelpers {
         e match {
           case e: Bundle => e.assignFromBigInt(truncVal)
           case e: BaseType => {
-            e.simPublic() // does NOT work, not accessible issue
             setBigInt(e, truncVal)
           }
         }

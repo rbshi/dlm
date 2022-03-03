@@ -40,14 +40,16 @@ class RdmaArb(cnt: Int) extends Component {
   strmFifo1.io.push.valid := io.rdmaio.sq.fire
 
   val rdSel = strmFifo1.io.pop.payload
-  (io.rdmaV, StreamDemux(io.rdmaio.rd_req.continueWhen(strmFifo2.io.availability > 0), rdSel, cnt)).zipped.foreach(_.rd_req << _)
-  strmFifo2.io.push << strmFifo1.io.pop.continueWhen(io.rdmaio.rd_req.fire)
+  (io.rdmaV, StreamDemux(io.rdmaio.rd_req.continueWhen(strmFifo1.io.occupancy > 0), rdSel, cnt)).zipped.foreach(_.rd_req << _)
+  // avoid 1 cycle of .occupancy in io.pop
+  val rRdReqFire = RegNext(io.rdmaio.rd_req.fire)
+  strmFifo2.io.push << strmFifo1.io.pop.continueWhen(rRdReqFire)
 
   val axiSrcSel = strmFifo2.io.pop.payload
   io.rdmaio.axis_src << StreamMux(axiSrcSel, io.rdmaV.map(_.axis_src))
 
   // throwFireWhen
-  strmFifo2.io.pop.ready := io.rdmaio.axis_src.fire ? True | False
+  strmFifo2.io.pop.ready := (io.rdmaio.axis_src.fire && io.rdmaio.axis_src.tlast) ? True | False
 
   // slve interface arb
   // fire wr_req => get wr_req .params (get which flow demux to) => fire axis_sink .last => demux

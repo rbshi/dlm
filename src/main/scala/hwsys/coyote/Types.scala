@@ -45,7 +45,7 @@ case class RdmaBaseT() extends Bundle {
 }
 
 case class RdmaReqT() extends Bundle {
-  val rsrvd = UInt(256-5-24-1-1-1-192 bits) // total len = 96b
+  val rsrvd = UInt(256-5-24-1-1-1-192 bits) // 32b
   val pkg = UInt(192 bits) // RdmaBaseT or RPC
   val mode = Bool()
   val host = Bool()
