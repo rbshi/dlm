@@ -23,13 +23,16 @@ class RdmaArb(cnt: Int) extends Component {
   // fire sq => fire rd_req => fire axis_src with .last => demux to next
   val strmFifo1, strmFifo2 = StreamFifo(UInt(log2Up(cnt) bits), 32)
 
-  val mskSqVld = Vec(Bool(),cnt)
-  (mskSqVld, io.rdmaV).zipped.foreach(_ := _.sq.valid)
+  // val mskSqVld = Vec(Bool(),cnt)
+  val mskSqVld = Bits(cnt bits)
+  for (i <- mskSqVld.bitsRange)
+    mskSqVld(i) := io.rdmaV(i).sq.valid
 
   // round-robin
   val mskSqSel = cloneOf(mskSqVld)
-  val mskLocked = RegNextWhen(mskSqSel, io.rdmaio.sq.fire)
-  mskSqSel := OHMasking.roundRobin(mskSqVld, Vec(mskLocked.last +: mskLocked.take(mskLocked.length-1)))
+  // LSB should be initialized to 1
+  val mskLocked = RegNextWhen(mskSqSel, io.rdmaio.sq.fire).init(1)
+  mskSqSel := OHMasking.roundRobin(mskSqVld, mskLocked(0) ## mskLocked(mskLocked.high downto 1))
 
   val sqSel = OHToUInt(mskSqSel)
 
@@ -40,14 +43,13 @@ class RdmaArb(cnt: Int) extends Component {
   strmFifo1.io.push.valid := io.rdmaio.sq.fire
 
   val rdSel = strmFifo1.io.pop.payload
-  (io.rdmaV, StreamDemux(io.rdmaio.rd_req.continueWhen(strmFifo1.io.occupancy > 0), rdSel, cnt)).zipped.foreach(_.rd_req << _)
+  (io.rdmaV, StreamDemux(io.rdmaio.rd_req.continueWhen(strmFifo1.io.pop.valid), rdSel, cnt)).zipped.foreach(_.rd_req << _)
   // avoid 1 cycle of .occupancy in io.pop
-  val rRdReqFire = RegNext(io.rdmaio.rd_req.fire)
-  strmFifo2.io.push << strmFifo1.io.pop.continueWhen(rRdReqFire)
+  // val rRdReqFire = RegNext(io.rdmaio.rd_req.fire)
+  strmFifo2.io.push << strmFifo1.io.pop.continueWhen(io.rdmaio.rd_req.fire)
 
   val axiSrcSel = strmFifo2.io.pop.payload
-  io.rdmaio.axis_src << StreamMux(axiSrcSel, io.rdmaV.map(_.axis_src))
-
+  io.rdmaio.axis_src << StreamMux(axiSrcSel, io.rdmaV.map(_.axis_src)).continueWhen(strmFifo2.io.pop.valid)
   // throwFireWhen
   strmFifo2.io.pop.ready := (io.rdmaio.axis_src.fire && io.rdmaio.axis_src.tlast) // pop after an axis fragment
 

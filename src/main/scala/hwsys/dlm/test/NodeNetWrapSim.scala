@@ -75,8 +75,8 @@ object NodeNetWrapSim {
         e.rdmaCtrl.foreach(_.en #= false)
         e.rdmaCtrl.foreach(_.len #= 1024)
         e.rdmaCtrl.foreach(_.qpn #= 0)
-        e.rdmaCtrl(0).flowId #= idx // for each node, mstr flowId is 0;
-        e.rdmaCtrl(1).flowId #= idx
+        e.rdmaCtrl(0).flowId #= 1 // for each node, mstr flowId is 1, wr to rmt slve
+        e.rdmaCtrl(1).flowId #= 0 // mstr flowId is 0, wr to rmt mstr
       }
 
       // wait the fifo (empty_ptr) to reset
