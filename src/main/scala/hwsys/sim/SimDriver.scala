@@ -276,7 +276,7 @@ object SimDriver {
             enQ.enqueue(reqVal)
           }
 
-          println(s"[sqCmd] enq ${reqVal.hexString()}")
+          // println(s"[sqCmd] enq ${reqVal.hexString()}")
 
         }
       }
@@ -311,7 +311,7 @@ object SimDriver {
               axiSinkQ(getRmt(idx)).enqueue(axiSrcVal)
               // fragEnd = genFromBigInt(Axi4StreamData(512), axiSrcVal).tlast.toBoolean
               fragEnd = ((axiSrcVal >> (512+64)) & BigInt(1)) == 1
-              println(s"[axiSinkQ] enq ${axiSrcVal.hexString()}")
+              // println(s"[axiSinkQ] enq ${axiSrcVal.hexString()}")
             } while (!fragEnd)
             q.dequeue() // cmdQ
           } else {
@@ -328,7 +328,7 @@ object SimDriver {
         while(true){
           if(q.nonEmpty && (cycle > tsQ1(idx).front + lat)){
             val reqVal = q.dequeue()
-            println(s"[wrReq] deq ${reqVal.hexString()}")
+            // println(s"[wrReq] deq ${reqVal.hexString()}")
             wrReq(idx).sendData(cd, reqVal)
             tsQ1(idx).dequeue()
           } else {
@@ -352,7 +352,7 @@ object SimDriver {
               // fragEnd = genFromBigInt(Axi4StreamData(512), axiSinkVal).tlast.toBoolean
               fragEnd = ((axiSinkVal >> (512+64)) & BigInt(1)) == 1
               axiSink(idx).sendData(cd, axiSinkVal)
-              println(s"[axiSinkQ] deq ${axiSinkVal.hexString()}")
+              // println(s"[axiSinkQ] deq ${axiSinkVal.hexString()}")
             } while (!fragEnd)
             q.dequeue() // cmdQ
             tsQ2(idx).dequeue()

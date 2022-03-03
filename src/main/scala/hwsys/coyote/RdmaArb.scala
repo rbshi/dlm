@@ -49,7 +49,7 @@ class RdmaArb(cnt: Int) extends Component {
   io.rdmaio.axis_src << StreamMux(axiSrcSel, io.rdmaV.map(_.axis_src))
 
   // throwFireWhen
-  strmFifo2.io.pop.ready := (io.rdmaio.axis_src.fire && io.rdmaio.axis_src.tlast) ? True | False
+  strmFifo2.io.pop.ready := (io.rdmaio.axis_src.fire && io.rdmaio.axis_src.tlast) // pop after an axis fragment
 
   // slve interface arb
   // fire wr_req => get wr_req .params (get which flow demux to) => fire axis_sink .last => demux
@@ -64,7 +64,8 @@ class RdmaArb(cnt: Int) extends Component {
 
   val axiSinkSel = strmFifo3.io.pop.payload
 
-  (io.rdmaV, StreamDemux(io.rdmaio.axis_sink, axiSinkSel, cnt)).zipped.foreach(_.axis_sink << _)
-  strmFifo3.io.pop.ready := (io.rdmaio.axis_sink.fire && io.rdmaio.axis_sink.tlast) ? True | False
+  // strmFifo3.io.pop.valid to address the latency between push and pop io
+  (io.rdmaV, StreamDemux(io.rdmaio.axis_sink.continueWhen(strmFifo3.io.pop.valid) , axiSinkSel, cnt)).zipped.foreach(_.axis_sink << _)
+  strmFifo3.io.pop.ready := (io.rdmaio.axis_sink.fire && io.rdmaio.axis_sink.tlast) // pop after an axis fragment
 
 }
