@@ -91,7 +91,7 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
   io.cntSent := io.cntSent + decCntToSend.asUInt(1 bit)
 
   val cntBeat = CntDynmicBound(io.len>>6, io.rdma_1.axis_src.fire) // each axi beat is with 64 B
-  when(cntBeat.willOverflow) (io.rdma_1.axis_src.tlast.set())
+  when(cntBeat.willOverflowIfInc) (io.rdma_1.axis_src.tlast.set())
 
 
 

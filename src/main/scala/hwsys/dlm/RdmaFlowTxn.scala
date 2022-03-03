@@ -51,19 +51,21 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
   val decCntToSend = io.rdma.axis_src.fire && io.rdma.axis_src.tlast
   val cntAxiToSend = CntIncDec(8 bits, incCntToSend, decCntToSend)
 
+  // NOTE: using timeOut may have unknown affect on flow control
+  // rst the timer with sq.fire to avoid over issue sq
   val timeOutInc = Bool()
-  val timeOut = pauseTimeOut(8 bits, timeOutInc, io.rdma.sq.fire, decCntToSend)
+  val timeOut = pauseTimeOut(9 bits, timeOutInc, io.rdma.sq.fire) // 512 cycles
+  // buf the to status and refresh with sq.fire or axi.last
+  val rTimeOut = RegNextWhen(timeOut.isTimeOut, io.rdma.sq.fire || decCntToSend)
 
-  // val cntBeat = CntDynmicBound(Mux(timeOut.isTimeOut, U(1), io.ctrl.len>>6),  io.rdma.axis_src.fire) // each axi beat is with 64 B
-  val cntBeat = CntDynmicBound(io.ctrl.len>>6,  io.rdma.axis_src.fire) // each axi beat is with 64 B
-  when(cntBeat.willOverflow) (io.rdma.axis_src.tlast.set())
+  val cntBeat = CntDynmicBound(Mux(rTimeOut, U(1), io.ctrl.len>>6),  io.rdma.axis_src.fire) // each axi beat is with 64 B
+  when(cntBeat.willOverflowIfInc) (io.rdma.axis_src.tlast.set())
 
   // sq settings
   val rdma_base = RdmaBaseT()
   rdma_base.lvaddr := 0
   rdma_base.rvaddr := io.ctrl.flowId.resized // for rdma wr to different resource, use flowId as rvadd to identify
-  // rdma_base.len := Mux(timeOut.isTimeOut, U(64), io.ctrl.len)
-  rdma_base.len := io.ctrl.len
+  rdma_base.len := Mux(rTimeOut, U(64), io.ctrl.len)
   rdma_base.params := 0
 
   val sq = RdmaReqT()
@@ -88,7 +90,6 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
 
     timeOutInc := sendQ.io.occupancy > 0
 
-
     val nFlyRdGet = AccumIncDec(12 bits, io.q_sink.fire && io.sendStatusVld, io.q_src.fire && io.recvStatusVld, io.nRdGetReq, io.nRdGetResp)
     val nFlyWrCmt = AccumIncDec(12 bits, io.q_sink.fire && io.sendStatusVld, io.q_src.fire && io.recvStatusVld, io.nWrCmtReq, io.nWrCmtResp)
     val nFlyLkLine = CntIncDec(8 bits, io.q_sink.fire && io.sendStatusVld, io.q_src.fire && io.recvStatusVld)
@@ -112,8 +113,7 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
     // fire sq criteria: enough data in sendQ (fifo.occupancy > 16, for 1K packet)
     val fireSq : Bool = (sendQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16
 
-    // io.rdma.sq.valid := fireSq || timeOut.isTimeOut
-    io.rdma.sq.valid := fireSq
+    io.rdma.sq.valid := fireSq || timeOut.isTimeOut
 
     io.dbg(0) := fireC1
     io.dbg(1) := fireC2
@@ -145,8 +145,7 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
     val fireSq = (respQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16 // cast to SInt for comparison
 
     timeOutInc := respQ.io.occupancy > 0
-    // io.rdma.sq.valid := fireSq || timeOut.isTimeOut
-    io.rdma.sq.valid := fireSq
+    io.rdma.sq.valid := fireSq || timeOut.isTimeOut
 
   }
 

@@ -25,8 +25,8 @@ case class CntIncDec(bitCnt: BitCount, incFlag: Bool, decFlag: Bool) {
 case class CntDynmicBound(upBoundEx: UInt, incFlag: Bool, decFlag: Bool = False) {
 
   val cnt = Reg(UInt(upBoundEx.getWidth bits)).init(0)
-  val willOverflow = (cnt === upBoundEx -1) && incFlag
-  val willUnderflow = (cnt === 0) && decFlag
+  val willOverflowIfInc = (cnt === upBoundEx -1)
+  val willUnderflowIfDec = (cnt === 0)
   val willClear = False.allowOverride
 
   def clearAll(): Unit = willClear := True
@@ -37,7 +37,7 @@ case class CntDynmicBound(upBoundEx: UInt, incFlag: Bool, decFlag: Bool = False)
     default ()
   }
 
-  when(willClear || willOverflow) (cnt.clearAll())
+  when(willClear || (willOverflowIfInc && incFlag)) (cnt.clearAll())
 
 }
 
@@ -59,7 +59,7 @@ case class AccumIncDec(bitCnt: BitCount, incFlag: Bool, decFlag: Bool, incVal: U
 }
 
 
-case class pauseTimeOut(bitCnt: BitCount, inc: Bool, pause: Bool, rst: Bool) {
+case class pauseTimeOut(bitCnt: BitCount, inc: Bool, rst: Bool, pause: Bool = False) {
 
   val cnt = Counter(bitCnt)
   val rPause = RegNextWhen(True, pause)
