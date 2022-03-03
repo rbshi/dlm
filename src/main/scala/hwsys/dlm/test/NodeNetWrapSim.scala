@@ -49,7 +49,7 @@ object NodeNetWrapSim {
           val fCId = (i: Int, j: Int) => 0
           // for different txnMan, there'll be a tIdOffs in txnEntrySimInt
           val fTId = (i: Int, j: Int) => j
-          val fLkAttr = (i: Int, j: Int) => 1
+          val fLkAttr = (i: Int, j: Int) => 0
           val fWLen = (i: Int, j: Int) => 0
           val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen, 0)(fNId, fCId, fTId, fLkAttr, fWLen).toArray
           SimDriver.instAxiMemSim(dut.io(idx).node.cmdAxi(iTxnMan), dut.clockDomain, Some(txnCtx))
@@ -63,7 +63,7 @@ object NodeNetWrapSim {
       }
 
       // connect rdma sim switch
-      SimDriver.rdmaSwitch(dut.clockDomain, 2, 100, dut.io.map(_.rdma.sq), dut.io.map(_.rdma.rd_req),
+      SimDriver.rdmaSwitch(dut.clockDomain, 2, 1000, dut.io.map(_.rdma.sq), dut.io.map(_.rdma.rd_req),
         dut.io.map(_.rdma.wr_req), dut.io.map(_.rdma.axis_src), dut.io.map(_.rdma.axis_sink))
 
       // node & rdma ctrl

@@ -80,7 +80,7 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
   if(isMstr){
     // mstr hw & behavior
 
-    val sendQ = StreamFifo(Bits(512 + 13 bits), 512) // 10 bits status: nReq(4):nWrCmtReq(4):nRdGetReq(4):statusVld
+    val sendQ = StreamFifo(Bits(512 bits), 512)
     val recvQ = StreamFifo(Bits(512 bits), 512)
 
     sendQ.flushWhen(~io.ctrl.en)
@@ -88,45 +88,37 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
 
     timeOutInc := sendQ.io.occupancy > 0
 
-    // sendQ
-    sendQ.io.push.translateFrom(io.q_sink)(_ := io.nReq ## io.nWrCmtReq ## io.nRdGetReq ## io.sendStatusVld ## _)
-    // have packet to send
-    // NOTE: truncate the MSBs used for flow control
-    io.rdma.axis_src.translateFrom(sendQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _.resized)
 
-    val sendStatusVld = sendQ.io.pop.payload(512)
-    val nRdGetReq = sendQ.io.pop.payload(516 downto 513).asUInt
-    val nWrCmtReq = sendQ.io.pop.payload(520 downto 517).asUInt
-    val nReq = sendQ.io.pop.payload(524 downto 521).asUInt
-
-    // maybe it's unused
+    val nFlyRdGet = AccumIncDec(12 bits, io.q_sink.fire && io.sendStatusVld, io.q_src.fire && io.recvStatusVld, io.nRdGetReq, io.nRdGetResp)
+    val nFlyWrCmt = AccumIncDec(12 bits, io.q_sink.fire && io.sendStatusVld, io.q_src.fire && io.recvStatusVld, io.nWrCmtReq, io.nWrCmtResp)
+    val nFlyLkLine = CntIncDec(8 bits, io.q_sink.fire && io.sendStatusVld, io.q_src.fire && io.recvStatusVld)
     // val nFlyReq = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nReq, io.nResp)
 
-    val nFlyWrCmt = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nWrCmtReq, io.nWrCmtResp)
-    val nFlyRdGet = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nRdGetReq, io.nRdGetResp)
-    //
-    val nFlyLkLine = CntIncDec(8 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld)
-
-    // fire sq criteria
-    // C1: enough data in sendQ (fifo.occupancy > 16, for 1K packet)
-    // C2: enough space in recvQ (data vol for recv: assuming all rdLkReq is granted)
-    // C3: assume all wrCmt will be in reqQ of slave
-    // C4: onFly lkReq number
-
-    val fireC1 : Bool = (sendQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16
-    val fireC2: Bool = recvQ.io.availability >= (nFlyLkLine.cnt + (nFlyRdGet.accum<<sysConf.wMaxTupLen))
+    // criteria of push data to sendQ
+    // C1: enough space in recvQ (data vol for recv: assuming all rdLkReq is granted)
+    // C2: assume all wrCmt will be in reqQ of slave
+    // C3: onFly lkReq number  16 (1K) x 16 (packet on fly)
+    val fireC1: Bool = recvQ.io.availability >= (nFlyLkLine.cnt + (nFlyRdGet.accum<<sysConf.wMaxTupLen))
     // FIXME: 512 is the FIFO depth of reqQ
-    val fireC3: Bool = 512 >= (nFlyLkLine.cnt + (nFlyWrCmt.accum<<sysConf.wMaxTupLen))
-    val fireC4: Bool = nFlyLkLine.cnt <= 256 // 16 (1K) x 16 (packet on fly)
-    val fireSq = fireC1 && fireC2 && fireC3 && fireC4 // if timeOut, fire the sq
+    val fireC2: Bool = 512 >= (nFlyLkLine.cnt + (nFlyWrCmt.accum<<sysConf.wMaxTupLen))
+    val fireC3: Bool = nFlyLkLine.cnt <= 256
+
+    // sendQ
+    sendQ.io.push << io.q_sink.continueWhen(fireC1 && fireC2 && fireC3)
+
+    // have packet to send
+    io.rdma.axis_src.translateFrom(sendQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _)
+
+    // fire sq criteria: enough data in sendQ (fifo.occupancy > 16, for 1K packet)
+    val fireSq : Bool = (sendQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16
+
+    // io.rdma.sq.valid := fireSq || timeOut.isTimeOut
+    io.rdma.sq.valid := fireSq
 
     io.dbg(0) := fireC1
     io.dbg(1) := fireC2
     io.dbg(2) := fireC3
-    io.dbg(3) := fireC4
-
-    // io.rdma.sq.valid := fireSq || timeOut.isTimeOut
-    io.rdma.sq.valid := fireSq
+    io.dbg(3) := False
 
     // recvQ
     recvQ.io.pop >> io.q_src

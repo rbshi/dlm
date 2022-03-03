@@ -45,7 +45,7 @@ trait SysConfig {
   val wTupLenPow = 3 //len(tuple)=2^wLen; maxLen = 64B << 7 = 8192 B
 
   // onFly control
-  val wMaxTupLen = 4 // 64 << 4
+  val wMaxTupLen = 2 // 64 << 2
 
   val axiConf = Axi4Config(
     addressWidth = 64,
