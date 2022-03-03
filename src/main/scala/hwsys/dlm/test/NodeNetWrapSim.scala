@@ -25,7 +25,8 @@ object NodeNetWrapSim {
       override val nLock: Int = 4096 * nLtPart
     }
 
-    SimConfig.withWave.compile {
+    SimConfig
+      .withWave.compile {
       val dut = new TwoNodeNetTop()
 
       dut.n.foreach { m =>

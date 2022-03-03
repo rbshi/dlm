@@ -32,6 +32,8 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
     // ctrl
     val ctrl = new RdmaCtrlIO
 
+    val dbg = out Vec(Bool(), 4)
+
   }
 
   io.rdma.rq.setBlocked()
@@ -91,9 +93,9 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
     io.rdma.axis_src.translateFrom(sendQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _.resized)
 
     val sendStatusVld = sendQ.io.pop.payload(512)
-    val nReq = sendQ.io.pop.payload(516 downto 513).asUInt
+    val nRdGetReq = sendQ.io.pop.payload(516 downto 513).asUInt
     val nWrCmtReq = sendQ.io.pop.payload(520 downto 517).asUInt
-    val nRdGetReq = sendQ.io.pop.payload(524 downto 521).asUInt
+    val nReq = sendQ.io.pop.payload(524 downto 521).asUInt
 
     // maybe it's unused
     // val nFlyReq = AccumIncDec(12 bits, sendQ.io.pop.fire && sendStatusVld, io.q_src.fire && io.recvStatusVld, nReq, io.nResp)
@@ -115,6 +117,11 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
     val fireC3: Bool = 512 >= (nFlyLkLine.cnt + (nFlyWrCmt.accum<<sysConf.wMaxTupLen))
     val fireC4: Bool = nFlyLkLine.cnt <= 256 // 16 (1K) x 16 (packet on fly)
     val fireSq = fireC1 && fireC2 && fireC3 && fireC4 // if timeOut, fire the sq
+
+    io.dbg(0) := fireC1
+    io.dbg(1) := fireC2
+    io.dbg(2) := fireC3
+    io.dbg(3) := fireC4
 
     io.rdma.sq.valid := fireSq || timeOut.isTimeOut
 
