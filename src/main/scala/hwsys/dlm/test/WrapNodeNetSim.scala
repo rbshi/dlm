@@ -9,11 +9,11 @@ import hwsys.util.Helpers._
 // Two nodes + RDMA flow
 class TwoNodeNetTop(implicit sysConf: SysConfig) extends Component {
   val io = Array.fill(2)(new NodeNetIO())
-  val n = Array.fill(2)(new NodeNetWrap())
+  val n = Array.fill(2)(new WrapNodeNet())
   (n, io).zipped.foreach(_.io.connectAllByName(_))
 }
 
-object NodeNetWrapSim {
+object WrapNodeNetSim {
 
   def main(args: Array[String]): Unit = {
 
@@ -21,7 +21,7 @@ object NodeNetWrapSim {
       override val nNode: Int = 2
       override val nCh: Int = 1
       override val nTxnMan: Int = 1
-      override val nLtPart: Int = 1
+      override val nLtPart: Int = 4
       override val nLock: Int = 4096 * nLtPart
     }
 
@@ -33,7 +33,7 @@ object NodeNetWrapSim {
         m.io.simPublic()
       }
       dut
-    }.doSim("nodewrapsim", 99) { dut =>
+    }.doSim("wrapnodesim", 99) { dut =>
 
       dut.clockDomain.forkStimulus(period = 10)
 

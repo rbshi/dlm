@@ -2,7 +2,7 @@ package hwsys.util
 
 import spinal.core._
 import spinal.lib._
-
+import spinal.lib.bus.amba4.axilite._
 
 /** Implicit helpers */
 object Helpers {
@@ -88,6 +88,23 @@ object Helpers {
       }
     }
 
+      // type issue
+//    def tieOffB[T <: Data](isOutSide: Boolean = true): Unit = {
+//      for ((name, element) <- bd.elements) {
+//        element match {
+//
+//          case s: Stream[Data] => s.tieOff()
+//          case b: Bundle => b.tieOffB(isOutSide)
+//          case d: BaseType => if((isOutSide && d.isInput) || (!isOutSide && d.isOutput)) d.assignDontCare()
+//          case vb: Vec[BaseType] => if((isOutSide && vb.isInput) || (!isOutSide && vb.isOutput)) vb.assignDontCare()
+//          case vbun: Vec[Bundle] => vbun.foreach(_.tieOff())
+//          case vstrm: Vec[Stream[Data]] => vstrm.foreach(_.tieOff())
+//          case _ => LocatedPendingError(s"tieOff behavior of $name is NOT defined.")
+//        }
+//      }
+//    }
+
+
   }
 
   implicit class StreamFifoUtils[T <: Data](streamFifo: StreamFifo[T]) {
@@ -95,6 +112,23 @@ object Helpers {
       streamFifo.io.flush := enFlush
     }
   }
+
+  implicit class AxiLite4SlaveFactoryUtils(ctrlR: AxiLite4SlaveFactory) {
+    def rwInPort[T <: BaseType](inD: T, addr: BigInt, bitOffset: Int = 0, doc: String = null): T = {
+      // require(inD.isInput || inD.isInOut)
+      // require(inD.getBitsWidth < ctrlR.busDataWidth)
+      val r = ctrlR.createReadAndWrite(inD, addr, bitOffset, doc)
+      inD := r
+      r
+    }
+
+    def getAddr(offset: Int)(implicit baseReg: Int): BigInt = {
+      (baseReg + offset) << log2Up(ctrlR.busDataWidth/8)
+    }
+
+
+  }
+
 
 }
 

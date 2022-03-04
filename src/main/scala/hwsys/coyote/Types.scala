@@ -1,9 +1,10 @@
 package hwsys.coyote
 
 import spinal.core._
-import spinal.lib.{master, slave}
+import spinal.lib._
+import spinal.lib.bus.amba4.axi._
+import spinal.lib.bus.amba4.axilite._
 
-import hwsys.util._
 import hwsys.util.Helpers._
 
 // both BpssReq & RDMAReq
@@ -90,8 +91,35 @@ class HostDataIO extends Bundle {
 }
 
 
+class CMemHostIO(cmemAxiConf: Axi4Config) extends Bundle {
+  // ctrl
+  val mode = in UInt(2 bits)
+  val hostAddr = in UInt(64 bits)
+  val cmemAddr = in UInt(64 bits)
+  val len = in UInt(16 bits)
+  val cnt = in UInt(64 bits)
+  val pid = in UInt(6 bits)
+  val cntDone = out(Reg(UInt(64 bits))).init(0)
 
+  // host data IO
+  val hostd = new HostDataIO
 
+  // cmem interface
+  val axi_cmem = master(Axi4(cmemAxiConf))
+
+  def regMap(r: AxiLite4SlaveFactory, baseR: Int): Int = {
+    implicit val baseReg = baseR
+    r.rwInPort(mode,     r.getAddr(0), 0, "CMemHost: mode")
+    r.rwInPort(hostAddr, r.getAddr(1), 0, "CMemHost: hostAddr")
+    r.rwInPort(cmemAddr, r.getAddr(2), 0, "CMemHost: cmemAddr")
+    r.rwInPort(len,      r.getAddr(3), 0, "CMemHost: len")
+    r.rwInPort(cnt,      r.getAddr(4), 0, "CMemHost: cnt")
+    r.rwInPort(pid,      r.getAddr(5), 0, "CMemHost: pid")
+    r.read(cntDone,      r.getAddr(6), 0, "CMemHost: cntDone")
+    val assignOffs = 7
+    assignOffs
+  }
+}
 
 
 

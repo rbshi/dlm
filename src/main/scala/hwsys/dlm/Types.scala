@@ -1,9 +1,13 @@
 package hwsys.dlm
 
-import hwsys.coyote._
 import spinal.core._
 import spinal.lib.bus.amba4.axi._
+import spinal.lib.bus.amba4.axilite.AxiLite4SlaveFactory
 import spinal.lib._
+
+import hwsys.coyote._
+import hwsys.util.Helpers._
+
 
 trait SysConfig {
 
@@ -18,6 +22,8 @@ trait SysConfig {
   def wCId = log2Up(nCh)
   def wTId = log2Up(nLock)
   def wTxnManId = log2Up(nTxnMan)
+
+  def nTxnAgent = nNode -1
 
   // txnMan params
   val nTxnCS = 64 // concurrent txn count, limited by axi arid (6 bits)
@@ -147,11 +153,11 @@ class LockTableIO(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle{
   val lkResp = master Stream(LkResp(conf, isTIdTrunc))
 }
 
-class RdmaCtrlIO extends Bundle {
+case class RdmaCtrlIO() extends Bundle {
   val en = in Bool()
   val len = in UInt(32 bits)
   val qpn = in UInt(24 bits)
-  val flowId = in UInt(8 bits)
+  val flowId = in UInt(4 bits)
 }
 
 class NodeIO(implicit sysConf: SysConfig) extends Bundle {
@@ -183,8 +189,57 @@ class NodeFlowIO(implicit sysConf: SysConfig) extends NodeIO {
 // Node + RDMA IO
 class NodeNetIO(implicit sysConf: SysConfig) extends Bundle{
   val node = new NodeIO()
-  val rdma = new RdmaIO
-  val rdmaCtrl = Array.fill(2)(new RdmaCtrlIO)
+  val rdma = new RdmaIO()
+  val rdmaCtrl = in Vec(RdmaCtrlIO(), 2)
+
+  def regMap(r: AxiLite4SlaveFactory, baseR: Int): Int = {
+    implicit val baseReg = baseR
+    // in
+    // rdmaCtrl MSB <-> LSB: flowId(4b), qpn(24b), len(32b), en(1b)
+    r.rwInPort(rdmaCtrl(0).en, r.getAddr(0), 0, "TxnEng: RDMA Mstr en")
+    r.rwInPort(rdmaCtrl(0).len, r.getAddr(0), 1, "TxnEng: RDMA Mstr len")
+    r.rwInPort(rdmaCtrl(0).qpn, r.getAddr(0), 33, "TxnEng: RDMA Mstr qpn")
+    r.rwInPort(rdmaCtrl(0).flowId, r.getAddr(0), 57, "TxnEng: RDMA Mstr flowId")
+
+    r.rwInPort(rdmaCtrl(1).en, r.getAddr(1), 0, "TxnEng: RDMA Slve en")
+    r.rwInPort(rdmaCtrl(1).len, r.getAddr(1), 1, "TxnEng: RDMA Slve len")
+    r.rwInPort(rdmaCtrl(1).qpn, r.getAddr(1), 33, "TxnEng: RDMA Slve qpn")
+    r.rwInPort(rdmaCtrl(1).flowId, r.getAddr(1), 57, "TxnEng: RDMA Slve flowId")
+
+    val rStart = r.rwInPort(node.start,     r.getAddr(2), 0, "TxnEng: nodeId")
+    rStart.clearWhen(rStart) // auto clear start sig
+    r.rwInPort(node.nodeId,     r.getAddr(3), 0, "TxnEng: nodeId")
+    r.rwInPort(node.txnNumTotal, r.getAddr(4), 0, "TxnEng: txnNumTotal")
+
+    var assignOffs = 5
+    node.cmdAddrOffs.foreach { e =>
+      r.rwInPort(e, r.getAddr(assignOffs), 0, "TxnEng: cmemAddr")
+      assignOffs += 1
+    }
+
+    // out
+    node.cntTxnCmt.foreach { e =>
+      r.read(e, r.getAddr(assignOffs), 0, "TxnEng: cntTxnCmt")
+      assignOffs += 1
+    }
+    node.cntTxnAbt.foreach { e =>
+      r.read(e, r.getAddr(assignOffs), 0, "TxnEng: cntTxnAbt")
+      assignOffs += 1
+    }
+    node.cntTxnLd.foreach { e =>
+      r.read(e, r.getAddr(assignOffs), 0, "TxnEng: cntTxnLd")
+      assignOffs += 1
+    }
+    node.cntClk.foreach { e =>
+      r.read(e, r.getAddr(assignOffs), 0, "TxnEng: cntClk")
+      assignOffs += 1
+    }
+    r.read(node.done.asBits, r.getAddr(assignOffs), 0, "TxnEng: done bitVector")
+    assignOffs += 1
+
+    assignOffs
+  }
+
 }
 
 

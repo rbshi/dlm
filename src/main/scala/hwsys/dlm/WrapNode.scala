@@ -5,7 +5,7 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi.Axi4
 
 
-class NodeWrap(implicit sysConf: SysConfig) extends Component {
+class WrapNode(implicit sysConf: SysConfig) extends Component {
 
   val io = new NodeFlowIO()
 

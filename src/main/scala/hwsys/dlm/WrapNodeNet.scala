@@ -7,12 +7,12 @@ import spinal.lib.bus.amba4.axi.Axi4
 import hwsys.coyote._
 import hwsys.util.Helpers._
 
-class NodeNetWrap(implicit sysConf: SysConfig) extends Component {
+class WrapNodeNet(implicit sysConf: SysConfig) extends Component {
 
   val io = new NodeNetIO()
 
   // modules
-  val nodeFlow = new NodeWrap()
+  val nodeFlow = new WrapNode()
   nodeFlow.io.connectSomeByName(io.node)
 
   val rdmaFlowMstr = new RdmaFlowTxn(isMstr = true)

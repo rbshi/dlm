@@ -9,13 +9,13 @@ import hwsys.util.Helpers._
 // Two nodes + Q Flow
 class TwoNodeTop(implicit sysConf: SysConfig) extends Component {
   val io = Array.fill(2)(new NodeFlowIO())
-  val n0, n1 = new NodeWrap()
+  val n0, n1 = new WrapNode()
   Seq(n0, n1).zipWithIndex.foreach { case(n, idx) =>
     n.io.connectAllByName(io(idx))
   }
 }
 
-object NodeWrapSim {
+object WrapNodeSim {
 
   def main(args: Array[String]): Unit = {
 
@@ -34,7 +34,7 @@ object NodeWrapSim {
         n.io.simPublic()
       }
       dut
-    }.doSim("nodewrapsim", 99) { dut =>
+    }.doSim("wrapnodesim", 99) { dut =>
 
       dut.clockDomain.forkStimulus(period = 10)
 

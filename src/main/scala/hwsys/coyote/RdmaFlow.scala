@@ -21,7 +21,7 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
     val len = in UInt(32 bits)
     val qpn = in UInt(24 bits)
     val nOnFly = in UInt(32 bits)
-    val flowId = in UInt(8 bits)
+    val flowId = in UInt(4 bits)
 
     // output
     val cntSent = out(Reg(UInt(32 bits))).init(0)

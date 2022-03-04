@@ -24,7 +24,7 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
     // }
 
     // ctrl
-    val ctrl = new RdmaCtrlIO
+    val ctrl = new RdmaCtrlIO()
 
     val dbg = out Vec(Bool(), 4)
 

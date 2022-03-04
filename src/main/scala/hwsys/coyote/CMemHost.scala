@@ -4,30 +4,18 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.fsm._
 import spinal.lib.bus.amba4.axi._
+import spinal.lib.bus.amba4.axilite._
 import spinal.lib.fsm.StateMachine
 
+import hwsys.util.Helpers._
+
 //
-case class HbmHost(hbmAxiConf: Axi4Config) extends Component {
+class CMemHost(cmemAxiConf: Axi4Config) extends Component {
 
-  val io = new Bundle {
-    // ctrl
-    val mode = in UInt(2 bits)
-    val hostAddr = in UInt(64 bits)
-    val hbmAddr = in UInt(64 bits)
-    val len = in UInt(16 bits)
-    val cnt = in UInt(64 bits)
-    val pid = in UInt(6 bits)
-    val cntDone = out(Reg(UInt(64 bits))).init(0)
-
-    // host data IO
-    val hostd = new HostDataIO
-
-    // hbm interface
-    val axi_hbm = master(Axi4(hbmAxiConf))
-  }
+  val io = new CMemHostIO(cmemAxiConf)
   
   val cntWrData, cntRdData, cntHostReq, cntHbmReq = Reg(UInt(64 bits)).init(0)
-  val hbmRdAddr, hbmWrAddr, reqHostAddr = Reg(UInt(64 bits)).init(0)
+  val cmemRdAddr, cmemWrAddr, reqHostAddr = Reg(UInt(64 bits)).init(0)
 
   // req assignment
   val bpss_rd_req, bpss_wr_req = ReqT()
@@ -57,8 +45,8 @@ case class HbmHost(hbmAxiConf: Axi4Config) extends Component {
       // cleanup the status
       when(io.mode(0) || io.mode(1)) {
         reqHostAddr := io.hostAddr
-        hbmRdAddr := io.hbmAddr
-        hbmWrAddr := io.hbmAddr
+        cmemRdAddr := io.cmemAddr
+        cmemWrAddr := io.cmemAddr
         List(cntRdData, cntWrData, cntHostReq, cntHbmReq, io.cntDone).foreach(_.clearAll())
       }
     }
@@ -78,49 +66,51 @@ case class HbmHost(hbmAxiConf: Axi4Config) extends Component {
 
 
   // deft behavior of rd from host
-  // axi_hbm wr
-  io.axi_hbm.aw.setBurstINCR()
-  io.axi_hbm.aw.len := ((io.len >> 6) - 1).resized
-  io.axi_hbm.aw.size := log2Up(512/8)
-  io.axi_hbm.aw.addr := hbmWrAddr.resized
+  // axi_cmem wr
+  io.axi_cmem.aw.setBurstINCR()
+  io.axi_cmem.aw.len := ((io.len >> 6) - 1).resized
+  io.axi_cmem.aw.size := log2Up(512/8)
+  io.axi_cmem.aw.addr := cmemWrAddr.resized
+  io.axi_cmem.aw.id := 0
 
-  io.axi_hbm.w.strb.setAll()
-  io.axi_hbm.w.data <> io.hostd.axis_host_sink.tdata
-  io.axi_hbm.w.last <> io.hostd.axis_host_sink.tlast
-  io.axi_hbm.w.valid <> io.hostd.axis_host_sink.valid
-  io.axi_hbm.w.ready <> io.hostd.axis_host_sink.ready
+  io.axi_cmem.w.strb.setAll()
+  io.axi_cmem.w.data <> io.hostd.axis_host_sink.tdata
+  io.axi_cmem.w.last <> io.hostd.axis_host_sink.tlast
+  io.axi_cmem.w.valid <> io.hostd.axis_host_sink.valid
+  io.axi_cmem.w.ready <> io.hostd.axis_host_sink.ready
 
-  io.axi_hbm.b.ready := True
+  io.axi_cmem.b.ready := True
 
-  // axi_hbm rd
-  io.axi_hbm.ar.setBurstINCR()
-  io.axi_hbm.ar.len := ((io.len >> 6) - 1).resized
-  io.axi_hbm.ar.size := log2Up(512/8)
-  io.axi_hbm.ar.addr := hbmRdAddr.resized
+  // axi_cmem rd
+  io.axi_cmem.ar.setBurstINCR()
+  io.axi_cmem.ar.len := ((io.len >> 6) - 1).resized
+  io.axi_cmem.ar.size := log2Up(512/8)
+  io.axi_cmem.ar.addr := cmemRdAddr.resized
+  io.axi_cmem.ar.id := 0
 
-  io.axi_hbm.r.data <> io.hostd.axis_host_src.tdata
-  io.axi_hbm.r.valid <> io.hostd.axis_host_src.valid
-  io.axi_hbm.r.ready <> io.hostd.axis_host_src.ready
+  io.axi_cmem.r.data <> io.hostd.axis_host_src.tdata
+  io.axi_cmem.r.valid <> io.hostd.axis_host_src.valid
+  io.axi_cmem.r.ready <> io.hostd.axis_host_src.ready
 
   io.hostd.axis_host_src.tdest := 0
   io.hostd.axis_host_src.tlast := False
   io.hostd.axis_host_src.tkeep.setAll()
   
   // inc cnt
-  when(io.axi_hbm.aw.fire || io.axi_hbm.ar.fire) (cntHbmReq := cntHbmReq + 1)
-  when(io.axi_hbm.aw.fire) (hbmWrAddr := hbmWrAddr + io.len)
-  when(io.axi_hbm.ar.fire) (hbmRdAddr := hbmRdAddr + io.len)
+  when(io.axi_cmem.aw.fire || io.axi_cmem.ar.fire) (cntHbmReq := cntHbmReq + 1)
+  when(io.axi_cmem.aw.fire) (cmemWrAddr := cmemWrAddr + io.len)
+  when(io.axi_cmem.ar.fire) (cmemRdAddr := cmemRdAddr + io.len)
 
   when(io.hostd.bpss_rd_req.fire) {
     cntHostReq := cntHostReq + 1
     reqHostAddr := reqHostAddr + io.len
   }
 
-  val hbmToReq = cntHbmReq =/= io.cnt
+  val cmemToReq = cntHbmReq =/= io.cnt
   val hostToReq = cntHostReq =/= io.cnt
 
-  io.axi_hbm.aw.valid := hbmToReq && fsm.isActive(fsm.RD)
-  io.axi_hbm.ar.valid := hbmToReq && fsm.isActive(fsm.WR)
+  io.axi_cmem.aw.valid := cmemToReq && fsm.isActive(fsm.RD)
+  io.axi_cmem.ar.valid := cmemToReq && fsm.isActive(fsm.WR)
 
   io.hostd.bpss_rd_req.valid := hostToReq && fsm.isActive(fsm.RD)
   io.hostd.bpss_wr_req.valid := hostToReq && fsm.isActive(fsm.WR)
@@ -128,5 +118,8 @@ case class HbmHost(hbmAxiConf: Axi4Config) extends Component {
   when(io.hostd.bpss_rd_done.fire || io.hostd.bpss_wr_done.fire)(io.cntDone := io.cntDone + 1)
   when(io.hostd.axis_host_sink.fire) (cntRdData := cntRdData + 1)
   when(io.hostd.axis_host_src.fire) {cntWrData := cntWrData + 1}
+
+  io.hostd.bpss_rd_done.ready := True
+  io.hostd.bpss_wr_done.ready := True
 
 }
