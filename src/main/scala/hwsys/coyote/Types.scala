@@ -79,4 +79,20 @@ class RdmaIO extends Bundle {
   }
 }
 
+class HostDataIO extends Bundle {
+  // bpss h2c/c2h
+  val bpss_rd_req = master Stream StreamData(96)
+  val bpss_wr_req = master Stream StreamData(96)
+  val bpss_rd_done = slave Stream StreamData(6)
+  val bpss_wr_done = slave Stream StreamData(6)
+  val axis_host_sink = slave Stream BpssData(512)
+  val axis_host_src = master Stream BpssData(512)
+}
+
+
+
+
+
+
+
 
