@@ -8,7 +8,7 @@ import hwsys.dlm._
 import hwsys.sim._
 import hwsys.util.Helpers._
 
-
+// Two nodes + send/req/resp/recvQ w/o network latency model
 class TwoNodeArbTop(implicit sysConf: SysConfig) extends Component {
 
   // node0: with txnMan only

@@ -6,7 +6,7 @@ import hwsys.dlm._
 import hwsys.sim._
 import hwsys.util.Helpers._
 
-
+// Two nodes + RDMA flow
 class TwoNodeNetTop(implicit sysConf: SysConfig) extends Component {
   val io = Array.fill(2)(new NodeNetIO())
   val n = Array.fill(2)(new NodeNetWrap())
@@ -38,18 +38,18 @@ object NodeNetWrapSim {
       dut.clockDomain.forkStimulus(period = 10)
 
       // params
-      val txnLen = 16
+      val txnLen = 14
       val txnCnt = 256
       val txnMaxLen = sysConf.maxTxnLen - 1
 
       for (idx <- 0 until 2) {
         for (iTxnMan <- 0 until sysConf.nTxnMan) {
           // cmd memory
-          val fNId = (i: Int, j: Int) => 0
+          val fNId = (i: Int, j: Int) => j%2
           val fCId = (i: Int, j: Int) => 0
           // for different txnMan, there'll be a tIdOffs in txnEntrySimInt
           val fTId = (i: Int, j: Int) => i * txnLen + j
-          val fLkAttr = (i: Int, j: Int) => 1
+          val fLkAttr = (i: Int, j: Int) => j%2
           val fWLen = (i: Int, j: Int) => 0
           val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen, 0)(fNId, fCId, fTId, fLkAttr, fWLen).toArray
           SimDriver.instAxiMemSim(dut.io(idx).node.cmdAxi(iTxnMan), dut.clockDomain, Some(txnCtx))

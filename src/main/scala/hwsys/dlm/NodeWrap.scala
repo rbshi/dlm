@@ -4,31 +4,6 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.Axi4
 
-class NodeIO(implicit sysConf: SysConfig) extends Bundle {
-  val axi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan + sysConf.nNode -1)
-  val cmdAxi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan)
-
-  val nodeId = in UInt(sysConf.wNId bits)
-  val txnNumTotal = in UInt(32 bits)
-  val cmdAddrOffs = in Vec(UInt(32 bits), sysConf.nTxnMan) //NOTE: unit size 64B
-  val start = in Bool()
-
-  val done = out Vec(Bool(), sysConf.nTxnMan)
-  val cntTxnCmt, cntTxnAbt, cntTxnLd = out Vec(UInt(32 bits), sysConf.nTxnMan)
-  val cntClk = out Vec(UInt(40 bits), sysConf.nTxnMan)
-}
-
-// Node + Q IO
-class NodeFlowIO(implicit sysConf: SysConfig) extends NodeIO {
-  // network flow IO
-  val sendQ = master Stream Bits(512 bits)
-  val respQ = master Stream Bits(512 bits)
-  val reqQ = slave Stream Bits(512 bits)
-  val recvQ = slave Stream Bits(512 bits)
-  // network arb status
-  val sendStatusVld, recvStatusVld = out Bool()
-  val nReq, nWrCmtReq, nRdGetReq, nResp, nWrCmtResp, nRdGetResp = out UInt(4 bits)
-}
 
 class NodeWrap(implicit sysConf: SysConfig) extends Component {
 

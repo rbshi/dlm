@@ -1,5 +1,6 @@
 package hwsys.dlm
 
+import hwsys.coyote._
 import spinal.core._
 import spinal.lib.bus.amba4.axi._
 import spinal.lib._
@@ -146,11 +147,112 @@ class LockTableIO(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle{
   val lkResp = master Stream(LkResp(conf, isTIdTrunc))
 }
 
+class RdmaCtrlIO extends Bundle {
+  val en = in Bool()
+  val len = in UInt(32 bits)
+  val qpn = in UInt(24 bits)
+  val flowId = in UInt(8 bits)
+}
+
+class NodeIO(implicit sysConf: SysConfig) extends Bundle {
+  val axi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan + sysConf.nNode -1)
+  val cmdAxi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan)
+
+  val nodeId = in UInt(sysConf.wNId bits)
+  val txnNumTotal = in UInt(32 bits)
+  val cmdAddrOffs = in Vec(UInt(32 bits), sysConf.nTxnMan) //NOTE: unit size 64B
+  val start = in Bool()
+
+  val done = out Vec(Bool(), sysConf.nTxnMan)
+  val cntTxnCmt, cntTxnAbt, cntTxnLd = out Vec(UInt(32 bits), sysConf.nTxnMan)
+  val cntClk = out Vec(UInt(40 bits), sysConf.nTxnMan)
+}
+
+// Node + Q IO
+class NodeFlowIO(implicit sysConf: SysConfig) extends NodeIO {
+  // network flow IO
+  val sendQ = master Stream Bits(512 bits)
+  val respQ = master Stream Bits(512 bits)
+  val reqQ = slave Stream Bits(512 bits)
+  val recvQ = slave Stream Bits(512 bits)
+  // network arb status
+  val sendStatusVld, recvStatusVld = out Bool()
+  val nReq, nWrCmtReq, nRdGetReq, nResp, nWrCmtResp, nRdGetResp = out UInt(4 bits)
+}
+
+// Node + RDMA IO
+class NodeNetIO(implicit sysConf: SysConfig) extends Bundle{
+  val node = new NodeIO()
+  val rdma = new RdmaIO
+  val rdmaCtrl = Array.fill(2)(new RdmaCtrlIO)
+}
 
 
+case class TxnAgentIO(conf: SysConfig) extends Bundle {
+  // from net arb
+  val lkReq = slave Stream LkReq(conf, isTIdTrunc = false)
+  val wrData = slave Stream Bits(512 bits)
+  val lkResp = master Stream LkResp(conf, isTIdTrunc = false)
+  val rdData = master Stream Bits(512 bits)
+
+  // local data axi
+  val axi = master(Axi4(conf.axiConf))
+
+  // lt
+  val ltReq = master Stream LkReq(conf, isTIdTrunc = false)
+  val ltResp = slave Stream LkResp(conf, isTIdTrunc = false)
+}
 
 
+case class TxnManCSIO(conf: SysConfig) extends Bundle {
 
+  // local/rmt req interface
+  val lkReqLoc, lkReqRmt = master Stream LkReq(conf, isTIdTrunc = false)
+  val lkRespLoc, lkRespRmt = slave Stream LkResp(conf, isTIdTrunc = false)
+
+  // rd/wr data from/to remote
+  val rdRmt = slave Stream Bits(512 bits)
+  val wrRmt = master Stream Bits(512 bits)
+
+  // local data axi
+  val axi = master(Axi4(conf.axiConf))
+
+  // cmd axi
+  val cmdAxi = master(Axi4(conf.axiConf))
+
+  // control signals (wire the input to the top AXIL registers)
+  val start = in Bool() //NOTE: hold for 1 cycle
+
+  // txnMan config
+  val nodeId = in UInt (conf.wNId bits) // to avoid confusing with lkReq/Resp.nId
+  val txnManId = in UInt (conf.wTxnManId bits)
+  val txnNumTotal = in UInt (32 bits)
+  val cmdAddrOffs = in UInt (32 bits) //NOTE: unit size 64B
+
+
+  val done = out(Reg(Bool())).init(False)
+  val cntTxnCmt, cntTxnAbt, cntTxnLd = out(Reg(UInt(32 bits))).init(0)
+  val cntClk = out(Reg(UInt(40 bits))).init(0)
+
+  def setDefault() = {
+
+    // tie-off cmdAxi.write
+    cmdAxi.aw.valid.clear()
+    cmdAxi.w.valid.clear()
+    cmdAxi.aw.addr := 0
+    cmdAxi.aw.id := 0
+    cmdAxi.aw.len := 0
+    cmdAxi.aw.size := log2Up(512 / 8)
+    cmdAxi.aw.setBurstINCR()
+    cmdAxi.w.last := False
+    cmdAxi.w.data.clearAll()
+    cmdAxi.b.ready := True
+    if (conf.axiConf.useStrb) {
+      axi.w.strb.setAll()
+      cmdAxi.w.strb.setAll()
+    }
+  }
+}
 
 
 

@@ -6,7 +6,7 @@ import hwsys.dlm._
 import hwsys.sim._
 import hwsys.util.Helpers._
 
-
+// Two nodes + Q Flow
 class TwoNodeTop(implicit sysConf: SysConfig) extends Component {
   val io = Array.fill(2)(new NodeFlowIO())
   val n0, n1 = new NodeWrap()

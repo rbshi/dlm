@@ -6,23 +6,6 @@ import spinal.lib.bus.amba4.axi._
 import hwsys.util.Helpers._
 import spinal.core.Component.push
 
-
-case class TxnAgentIO(conf: SysConfig) extends Bundle {
-  // from net arb
-  val lkReq = slave Stream LkReq(conf, isTIdTrunc = false)
-  val wrData = slave Stream Bits(512 bits)
-  val lkResp = master Stream LkResp(conf, isTIdTrunc = false)
-  val rdData = master Stream Bits(512 bits)
-
-  // local data axi
-  val axi = master(Axi4(conf.axiConf))
-
-  // lt
-  val ltReq = master Stream LkReq(conf, isTIdTrunc = false)
-  val ltResp = slave Stream LkResp(conf, isTIdTrunc = false)
-}
-
-
 class TxnAgent(conf: SysConfig) extends Component {
 
   val io = TxnAgentIO(conf)

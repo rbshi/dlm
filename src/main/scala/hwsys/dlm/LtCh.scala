@@ -6,7 +6,7 @@ import hwsys.util._
 
 class LtCh(sysConf: SysConfig) extends Component{
   val io = LockTableIO(sysConf)
-  val ltAry = Array.fill(sysConf.nLtPart)(new LockTable(sysConf))
+  val ltAry = Array.fill(sysConf.nLtPart)(new LockTableNW(sysConf))
 
   // use the LSB bits for lkReq dispatching
   val lkReq2Lt = Stream(LkReq(sysConf, true))

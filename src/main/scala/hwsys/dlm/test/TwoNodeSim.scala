@@ -8,6 +8,7 @@ import hwsys.dlm._
 import hwsys.sim._
 import hwsys.util.Helpers._
 
+// Two nodes + lkReq/Resp rd/wrData direct connection
 class TwoNodeDirectTop(sysConf: SysConfig) extends Component {
 
   val n0 = new Area {

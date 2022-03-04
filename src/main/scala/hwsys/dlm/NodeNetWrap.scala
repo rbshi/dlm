@@ -7,13 +7,6 @@ import spinal.lib.bus.amba4.axi.Axi4
 import hwsys.coyote._
 import hwsys.util.Helpers._
 
-// Node + RDMA IO
-class NodeNetIO(implicit sysConf: SysConfig) extends Bundle{
-  val node = new NodeIO()
-  val rdma = new RdmaIO
-  val rdmaCtrl = Array.fill(2)(new RdmaCtrlIO)
-}
-
 class NodeNetWrap(implicit sysConf: SysConfig) extends Component {
 
   val io = new NodeNetIO()

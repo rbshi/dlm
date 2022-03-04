@@ -1,6 +1,10 @@
 package hwsys.coyote
 
 import spinal.core._
+import spinal.lib.{master, slave}
+
+import hwsys.util._
+import hwsys.util.Helpers._
 
 // both BpssReq & RDMAReq
 case class ReqT() extends Bundle {
@@ -53,4 +57,26 @@ case class RdmaReqT() extends Bundle {
   val qpn = UInt(24 bits)
   val opcode = UInt(5 bits)
 }
+
+
+class RdmaIO extends Bundle {
+  // rd/wr cmd
+  val rd_req = slave Stream StreamData(96)
+  val wr_req = slave Stream StreamData(96)
+  val rq = slave Stream StreamData(256)
+  val sq = master Stream StreamData(256)
+
+  val axis_sink = slave Stream Axi4StreamData(512)
+  val axis_src =  master Stream Axi4StreamData(512)
+
+  def flipDir(): Unit = {
+    rd_req.flipDir()
+    wr_req.flipDir()
+    rq.flipDir()
+    sq.flipDir()
+    axis_sink.flipDir()
+    axis_src.flipDir()
+  }
+}
+
 

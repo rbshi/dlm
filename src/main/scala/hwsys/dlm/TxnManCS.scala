@@ -8,57 +8,6 @@ import spinal.lib.bus.amba4.axi._
 import spinal.lib.fsm.StateMachine
 import hwsys.util._
 
-case class TxnManCSIO(conf: SysConfig) extends Bundle {
-
-  // local/rmt req interface
-  val lkReqLoc, lkReqRmt = master Stream LkReq(conf, isTIdTrunc = false)
-  val lkRespLoc, lkRespRmt = slave Stream LkResp(conf, isTIdTrunc = false)
-
-  // rd/wr data from/to remote
-  val rdRmt = slave Stream Bits(512 bits)
-  val wrRmt = master Stream Bits(512 bits)
-
-  // local data axi
-  val axi = master(Axi4(conf.axiConf))
-
-  // cmd axi
-  val cmdAxi = master(Axi4(conf.axiConf))
-
-  // control signals (wire the input to the top AXIL registers)
-  val start = in Bool() //NOTE: hold for 1 cycle
-
-  // txnMan config
-  val nodeId = in UInt (conf.wNId bits) // to avoid confusing with lkReq/Resp.nId
-  val txnManId = in UInt (conf.wTxnManId bits)
-  val txnNumTotal = in UInt (32 bits)
-  val cmdAddrOffs = in UInt (32 bits) //NOTE: unit size 64B
-
-
-  val done = out(Reg(Bool())).init(False)
-  val cntTxnCmt, cntTxnAbt, cntTxnLd = out(Reg(UInt(32 bits))).init(0)
-  val cntClk = out(Reg(UInt(40 bits))).init(0)
-
-  def setDefault() = {
-
-    // tie-off cmdAxi.write
-    cmdAxi.aw.valid.clear()
-    cmdAxi.w.valid.clear()
-    cmdAxi.aw.addr := 0
-    cmdAxi.aw.id := 0
-    cmdAxi.aw.len := 0
-    cmdAxi.aw.size := log2Up(512 / 8)
-    cmdAxi.aw.setBurstINCR()
-    cmdAxi.w.last := False
-    cmdAxi.w.data.clearAll()
-    cmdAxi.b.ready := True
-    if (conf.axiConf.useStrb) {
-      axi.w.strb.setAll()
-      cmdAxi.w.strb.setAll()
-    }
-  }
-}
-
-
 // TODO: each channel may contain multiple tables, the tId to address translation logic will be dedicated
 class TxnManCS(conf: SysConfig) extends Component with RenameIO {
 

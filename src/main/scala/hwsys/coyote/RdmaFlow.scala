@@ -6,28 +6,7 @@ import spinal.lib._
 import hwsys.util._
 import hwsys.util.Helpers._
 
-class RdmaIO extends Bundle {
-  // rd/wr cmd
-  val rd_req = slave Stream StreamData(96)
-  val wr_req = slave Stream StreamData(96)
-  val rq = slave Stream StreamData(256)
-  val sq = master Stream StreamData(256)
-
-  val axis_sink = slave Stream Axi4StreamData(512)
-  val axis_src =  master Stream Axi4StreamData(512)
-
-  def flipDir(): Unit = {
-    rd_req.flipDir()
-    wr_req.flipDir()
-    rq.flipDir()
-    sq.flipDir()
-    axis_sink.flipDir()
-    axis_src.flipDir()
-  }
-
-}
-
-
+// FIXME: NOT tested after simplification
 case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
 
   val io = new Bundle {

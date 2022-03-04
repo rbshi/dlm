@@ -7,12 +7,6 @@ import hwsys.util._
 import hwsys.util.Helpers._
 import hwsys.coyote._
 
-class RdmaCtrlIO extends Bundle {
-  val en = in Bool()
-  val len = in UInt(32 bits)
-  val qpn = in UInt(24 bits)
-  val flowId = in UInt(8 bits)
-}
 
 class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Component with RenameIO {
 

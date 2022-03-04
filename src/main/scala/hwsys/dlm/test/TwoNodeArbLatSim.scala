@@ -10,7 +10,7 @@ import hwsys.util.Helpers._
 
 import scala.Stream
 
-
+// Two nodes + send/req/resp/recvQ with network latency model
 class TwoNodeArbLatTop(implicit val sysConf: SysConfig) extends Component {
 
   // node0: with txnMan only
