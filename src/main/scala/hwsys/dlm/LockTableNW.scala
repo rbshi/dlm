@@ -21,7 +21,7 @@ case class LockEntry(conf: SysConfig) extends Bundle{
 case class RamEntry(conf: SysConfig) extends Bundle{
 
   val net_ptr_val = Bool()
-  val next_ptr = UInt(conf.wHtTable-log2Up(conf.nLtPart) bits)
+  val next_ptr = UInt(conf.wHtTable bits)
   val owner_cnt = UInt(conf.wOwnerCnt bits)
   val lock_status = Bool() // sh, ex
   val key = UInt(conf.wTId-log2Up(conf.nLtPart) bits)
@@ -34,7 +34,7 @@ case class RamEntry(conf: SysConfig) extends Bundle{
 class LockTableNW(conf: SysConfig) extends Component {
 
   val io = new LockTableIO(conf, true)
-  val ht = new HashTableDUT(conf.wTId-log2Up(conf.nLtPart), conf.wHtValNW, conf.wHtBucket, conf.wHtTable-log2Up(conf.nLtPart))
+  val ht = new HashTableDUT(conf.wTId-log2Up(conf.nLtPart), conf.wHtValNW, conf.wHtBucket, conf.wHtTable)
 
   ht.io.setDefault()
 

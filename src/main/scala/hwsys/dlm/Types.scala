@@ -42,7 +42,7 @@ trait SysConfig {
   val wOwnerCnt = 8
   def wHtValNW = 1 + wOwnerCnt
   val wHtBucket = 8
-  def wHtTable = log2Up(nLock)
+  def wHtTable = 9 // depth 512: one BRAM
   def wLtPart = log2Up(nLtPart)
 
   // FIXME: for sim

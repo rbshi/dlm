@@ -26,6 +26,16 @@ object Gen1T2N {
   }
 }
 
+// TxnMan per node:Node:Channel:Partition per channel
+object Gen2T2N4C8P {
+  implicit val sysConf = new SysConfig {
+    override val nNode: Int = 2
+    override val nCh: Int = 4
+    override val nTxnMan: Int = 1
+    override val nLtPart: Int = 4
+    override val nLock: Int = 4096 * nLtPart
+  }
+}
 
 object SysCoyote1T2NGen {
   import Gen1T2N._
@@ -37,5 +47,16 @@ object SysCoyote1T2NGen {
       top
     }
   }
+}
 
+object SysCoyote2T2N4C8PGen {
+  import Gen2T2N4C8P._
+  def main(args: Array[String]): Unit = {
+    MySpinalConfig.generateVerilog{
+      val top = new WrapSys()
+      top.renameIO()
+      top.setDefinitionName("design_user_wrapper_2t2n4c8p")
+      top
+    }
+  }
 }
