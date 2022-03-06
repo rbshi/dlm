@@ -206,7 +206,7 @@ class NodeNetIO(implicit sysConf: SysConfig) extends Bundle{
     r.rwInPort(rdmaCtrl(1).qpn, r.getAddr(1), 33, "TxnEng: RDMA Slve qpn")
     r.rwInPort(rdmaCtrl(1).flowId, r.getAddr(1), 57, "TxnEng: RDMA Slve flowId")
 
-    val rStart = r.rwInPort(node.start,     r.getAddr(2), 0, "TxnEng: nodeId")
+    val rStart = r.rwInPort(node.start,     r.getAddr(2), 0, "TxnEng: start")
     rStart.clearWhen(rStart) // auto clear start sig
     r.rwInPort(node.nodeId,     r.getAddr(3), 0, "TxnEng: nodeId")
     r.rwInPort(node.txnNumTotal, r.getAddr(4), 0, "TxnEng: txnNumTotal")

@@ -109,7 +109,8 @@ class CMemHostIO(cmemAxiConf: Axi4Config) extends Bundle {
 
   def regMap(r: AxiLite4SlaveFactory, baseR: Int): Int = {
     implicit val baseReg = baseR
-    r.rwInPort(mode,     r.getAddr(0), 0, "CMemHost: mode")
+    val rMode = r.rwInPort(mode,     r.getAddr(0), 0, "CMemHost: mode")
+    when(rMode.orR) (rMode.clearAll()) // auto clear
     r.rwInPort(hostAddr, r.getAddr(1), 0, "CMemHost: hostAddr")
     r.rwInPort(cmemAddr, r.getAddr(2), 0, "CMemHost: cmemAddr")
     r.rwInPort(len,      r.getAddr(3), 0, "CMemHost: len")

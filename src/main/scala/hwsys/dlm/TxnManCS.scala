@@ -578,13 +578,18 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
   // io.done: all txn rlseDone; all txn loaded; set done only once
   when(rRlseDone.andR && io.cntTxnLd === io.txnNumTotal && ~io.done)(io.done.set())
 
-  // io.cntClk
+  // io.cntClk & clear status reg
   val clkCnt = new StateMachine {
     val IDLE = new State with EntryPoint
     val CNT = new State
     IDLE.whenIsActive {
       when(io.start) {
         io.cntClk.clearAll()
+
+        // clear status reg
+        io.done.clear()
+        Seq(io.cntTxnCmt, io.cntTxnAbt, io.cntTxnLd).foreach(_.clearAll())
+
         goto(CNT)
       }
     }
