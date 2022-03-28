@@ -17,7 +17,7 @@ class WrapSys(implicit sysConf: SysConfig) extends Component with RenameIO {
     // host data io
     val hostd = new HostDataIO
     // memory ports 0: host; others: user logic (may change)
-    val axi_hbm = Vec(master(Axi4(sysConf.axiConf)), 33)
+    val axi_mem = Vec(master(Axi4(sysConf.axiConf)), 16)
     // rdma
     val rdma_1 = new RdmaIO
   }
@@ -26,16 +26,16 @@ class WrapSys(implicit sysConf: SysConfig) extends Component with RenameIO {
   val hbmHost = new CMemHost(sysConf.axiConf)
   // connection
   hbmHost.io.hostd.connectAllByName(io.hostd)
-  hbmHost.io.axi_cmem <> io.axi_hbm(0)
+  hbmHost.io.axi_cmem <> io.axi_mem(0)
 
 
   // txnNodeWrap
   val txnEng = new WrapNodeNet()
   // connection
   // axi of txnMan & txnAgent
-  txnEng.io.node.axi.zipWithIndex.foreach{case (p, i) => p <> io.axi_hbm(1+i)}
+  txnEng.io.node.axi.zipWithIndex.foreach{case (p, i) => p <> io.axi_mem(1+i)}
   // axi of cmd of txnMan
-  txnEng.io.node.cmdAxi.zipWithIndex.foreach{case (p, i) => p <> io.axi_hbm(1+sysConf.nTxnMan+sysConf.nTxnAgent+i)}
+  txnEng.io.node.cmdAxi.zipWithIndex.foreach{case (p, i) => p <> io.axi_mem(1+sysConf.nTxnMan+sysConf.nTxnAgent+i)}
   // rdma
   txnEng.io.rdma.connectSomeByName(io.rdma_1)
 
@@ -48,9 +48,9 @@ class WrapSys(implicit sysConf: SysConfig) extends Component with RenameIO {
 
 
   // tieOff unused memory ports
-  for (i <- (1+sysConf.nTxnMan*2+sysConf.nTxnAgent) until io.axi_hbm.length) {
+  for (i <- (1+sysConf.nTxnMan*2+sysConf.nTxnAgent) until io.axi_mem.length) {
     // TODO: symplify
-    io.axi_hbm(i).setIdle()
+    io.axi_mem(i).setIdle()
   }
 
 }

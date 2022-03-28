@@ -16,46 +16,94 @@ object MySpinalConfig extends SpinalConfig(
   )
 )
 
-object Gen1T2N {
+// TxnMan per node:Node:Channel:Partition per channel
+object Gen1T2N1C8P {
   implicit val sysConf = new SysConfig {
     override val nNode: Int = 2
     override val nCh: Int = 1
     override val nTxnMan: Int = 1
-    override val nLtPart: Int = 4
-    override val nLock: Int = 4096 * nLtPart
+    override val nLtPart: Int = 8
+    override val nLock: Int = (((1<<10)<<10)<<8)>>6
   }
 }
 
-// TxnMan per node:Node:Channel:Partition per channel
-object Gen2T2N4C8P {
+object Gen1T2N4C8P {
   implicit val sysConf = new SysConfig {
     override val nNode: Int = 2
     override val nCh: Int = 4
     override val nTxnMan: Int = 1
-    override val nLtPart: Int = 4
-    override val nLock: Int = 4096 * nLtPart
+    override val nLtPart: Int = 8
+    override val nLock: Int = (((1<<10)<<10)<<8)>>6
   }
 }
 
-object SysCoyote1T2NGen {
-  import Gen1T2N._
+object Gen1T2N8C8P {
+  implicit val sysConf = new SysConfig {
+    override val nNode: Int = 2
+    override val nCh: Int = 8
+    override val nTxnMan: Int = 1
+    override val nLtPart: Int = 8
+    override val nLock: Int = (((1<<10)<<10)<<8)>>6
+  }
+}
+
+object Gen2T2N8C8P {
+  implicit val sysConf = new SysConfig {
+    override val nNode: Int = 2
+    override val nCh: Int = 8
+    override val nTxnMan: Int = 2
+    override val nLtPart: Int = 8
+    override val nLock: Int = (((1<<10)<<10)<<8)>>6
+  }
+}
+
+
+
+object SysCoyote1T2N1C8PGen {
+  import Gen1T2N1C8P._
   def main(args: Array[String]): Unit = {
     MySpinalConfig.generateVerilog{
       val top = new WrapSys()
       top.renameIO()
-      top.setDefinitionName("design_user_wrapper_1t2n")
+      top.setDefinitionName("design_user_wrapper_1t2n1c8p")
       top
     }
   }
 }
 
-object SysCoyote2T2N4C8PGen {
-  import Gen2T2N4C8P._
+
+object SysCoyote1T2N4C8PGen {
+  import Gen1T2N4C8P._
   def main(args: Array[String]): Unit = {
     MySpinalConfig.generateVerilog{
       val top = new WrapSys()
       top.renameIO()
-      top.setDefinitionName("design_user_wrapper_2t2n4c8p")
+      top.setDefinitionName("design_user_wrapper_1t2n4c8p")
+      top
+    }
+  }
+}
+
+
+object SysCoyote2T2N8C8PGen {
+  import Gen2T2N8C8P._
+  def main(args: Array[String]): Unit = {
+    MySpinalConfig.generateVerilog{
+      val top = new WrapSys()
+      top.renameIO()
+      top.setDefinitionName("design_user_wrapper_2t2n8c8p")
+      top
+    }
+  }
+}
+
+object SysCoyote1T2N8C8PGen {
+  import Gen1T2N8C8P._
+  def main(args: Array[String]): Unit = {
+    MySpinalConfig.generateVerilog{
+      val top = new WrapSys()
+      top.renameIO()
+      top.setDefinitionName("design_user_wrapper_1t2n8c8p")
       top
     }
   }

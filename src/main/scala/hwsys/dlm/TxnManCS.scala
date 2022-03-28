@@ -206,7 +206,8 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
 
     // TODO: data path
     // FIXME: tId -> addr translation logic
-    io.axi.ar.addr := (((rLkResp.tId << rLkResp.wLen) << 6) + (rLkResp.cId << conf.wChSize)).resized
+//    io.axi.ar.addr := (((rLkResp.tId << rLkResp.wLen) << 6) + (rLkResp.cId << conf.wChSize)).resized
+    io.axi.ar.addr := ((rLkResp.tId << 6) + (rLkResp.cId << conf.wChSize)).resized
     io.axi.ar.id := rLkResp.txnId
     io.axi.ar.len := (U(1) << rLkResp.wLen) - 1
     io.axi.ar.size := log2Up(512 / 8)
@@ -342,7 +343,8 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
 
     // TODO: data path
     // fixme: tId -> addr translation logic
-    io.axi.aw.addr := (((cmtTxn.tId << cmtTxn.wLen) << 6) + (cmtTxn.cId << conf.wChSize)).resized
+    // io.axi.aw.addr := (((cmtTxn.tId << cmtTxn.wLen) << 6) + (cmtTxn.cId << conf.wChSize)).resized
+    io.axi.aw.addr := ((cmtTxn.tId << 6) + (cmtTxn.cId << conf.wChSize)).resized
     io.axi.aw.id := curTxnId
     io.axi.aw.len := (U(1) << cmtTxn.wLen) - 1
     io.axi.aw.size := log2Up(512 / 8)

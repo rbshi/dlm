@@ -21,8 +21,8 @@ object WrapNodeNetSim {
       override val nNode: Int = 2
       override val nCh: Int = 1
       override val nTxnMan: Int = 1
-      override val nLtPart: Int = 4
-      override val nLock: Int = 4096 * nLtPart
+      override val nLtPart: Int = 8
+      override val nLock: Int = (((1<<10)<<10)<<8)>>6 // 4096 * nLtPart
     }
 
     SimConfig
@@ -38,18 +38,18 @@ object WrapNodeNetSim {
       dut.clockDomain.forkStimulus(period = 10)
 
       // params
-      val txnLen = 14
+      val txnLen = 16
       val txnCnt = 256
       val txnMaxLen = sysConf.maxTxnLen - 1
 
       for (idx <- 0 until 2) {
         for (iTxnMan <- 0 until sysConf.nTxnMan) {
           // cmd memory
-          val fNId = (i: Int, j: Int) => j%2
+          val fNId = (i: Int, j: Int) => 0
           val fCId = (i: Int, j: Int) => 0
           // for different txnMan, there'll be a tIdOffs in txnEntrySimInt
-          val fTId = (i: Int, j: Int) => i * txnLen + j
-          val fLkAttr = (i: Int, j: Int) => j%2
+          val fTId = (i: Int, j: Int) => j // i * txnLen + j
+          val fLkAttr = (i: Int, j: Int) => 1
           val fWLen = (i: Int, j: Int) => 0
           val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen, 0)(fNId, fCId, fTId, fLkAttr, fWLen).toArray
           SimDriver.instAxiMemSim(dut.io(idx).node.cmdAxi(iTxnMan), dut.clockDomain, Some(txnCtx))
@@ -80,7 +80,7 @@ object WrapNodeNetSim {
       }
 
       // wait the fifo (empty_ptr) to reset
-      dut.clockDomain.waitSampling(sysConf.nLock / sysConf.nLtPart + 1000)
+      dut.clockDomain.waitSampling((1<<sysConf.wHtTable) + 1000)
 
       // start
       dut.io.foreach { e =>

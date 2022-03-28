@@ -31,7 +31,8 @@ class TxnAgent(conf: SysConfig) extends Component {
   io.axi.aw.arbitrationFrom(reqFork2)
 
   // default axi.aw, axi.w
-  io.axi.aw.addr := (((reqFork2.tId << reqFork2.wLen) << 6) + (reqFork2.cId << conf.wChSize)).resized
+  // io.axi.aw.addr := (((reqFork2.tId << reqFork2.wLen) << 6) + (reqFork2.cId << conf.wChSize)).resized
+  io.axi.aw.addr := ((reqFork2.tId << 6) + (reqFork2.cId << conf.wChSize)).resized
   io.axi.aw.id := 0
   io.axi.aw.len := (U(1)<<reqFork2.wLen) -1
   io.axi.aw.size := log2Up(512/8)
@@ -64,7 +65,8 @@ class TxnAgent(conf: SysConfig) extends Component {
   val isRdRespGrant = ~io.ltResp.lkRelease && ~io.ltResp.lkType && (io.ltResp.respType === LockRespType.grant)
   io.ltResp.conditionFork2(isRdRespGrant, io.lkResp, io.axi.ar)
   // payload assignment
-  io.axi.ar.addr := (((io.ltResp.tId << io.ltResp.wLen) << 6) + (io.ltResp.cId << conf.wChSize)).resized
+  // io.axi.ar.addr := (((io.ltResp.tId << io.ltResp.wLen) << 6) + (io.ltResp.cId << conf.wChSize)).resized
+  io.axi.ar.addr := ((io.ltResp.tId << 6) + (io.ltResp.cId << conf.wChSize)).resized
   io.axi.ar.id := 0 // dont care
   io.axi.ar.len := (U(1)<<io.ltResp.wLen) -1
   io.axi.ar.size := log2Up(512/8)

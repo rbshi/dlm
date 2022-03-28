@@ -29,7 +29,7 @@ trait SysConfig {
   val nTxnCS = 64 // concurrent txn count, limited by axi arid (6 bits)
   val maxTxnLen = 64 // max len of each txn, space of on-chip mem (include the txnHd)
 
-  def wMaxTxnLen = log2Up(maxTxnLen)
+  def wMaxTxnLen= log2Up(maxTxnLen)
   def wLkIdx = log2Up(maxTxnLen) // lkIdx in one Txn, for OoO response
   def wTxnId = log2Up(nTxnCS)
 
@@ -46,7 +46,7 @@ trait SysConfig {
   def wLtPart = log2Up(nLtPart)
 
   // FIXME: for sim
-  val wChSize = 6 // 256MB of each channel (used as offset with global addressing)
+  val wChSize = 28 // 256MB of each channel (used as offset with global addressing)
 
   val wLkAttr = 2
   val wTupLenPow = 3 //len(tuple)=2^wLen; maxLen = 64B << 7 = 8192 B
@@ -56,17 +56,17 @@ trait SysConfig {
 
   val axiConf = Axi4Config(
     addressWidth = 64,
-    dataWidth    = 512,
+    dataWidth = 512,
     idWidth = 6,
     useStrb = true,
     useBurst = true,
     useId = true,
-    useLock      = false,
-    useRegion    = false,
-    useCache     = false,
-    useProt      = false,
-    useQos       = false,
-    useLen       = true
+    useLock = false,
+    useRegion = false,
+    useCache = false,
+    useProt = false,
+    useQos = false,
+    useLen = true
   )
 
 }
