@@ -101,7 +101,7 @@ class CMemHost(cmemAxiConf: Axi4Config) extends Component {
   when(io.axi_cmem.aw.fire) (cmemWrAddr := cmemWrAddr + io.len)
   when(io.axi_cmem.ar.fire) (cmemRdAddr := cmemRdAddr + io.len)
 
-  when(io.hostd.bpss_rd_req.fire) {
+  when(io.hostd.bpss_rd_req.fire || io.hostd.bpss_wr_req.fire) {
     cntHostReq := cntHostReq + 1
     reqHostAddr := reqHostAddr + io.len
   }
