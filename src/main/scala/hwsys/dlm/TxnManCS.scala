@@ -292,8 +292,11 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
     io.axi.r.ready := True
     // write resp
     io.axi.b.ready := True
-    when(io.axi.b.fire) {
-      cntCmtRespLoc(io.axi.b.id) := cntCmtRespLoc(io.axi.b.id) + 1
+
+    val rAxiBFire = RegNext(io.axi.b.fire)
+    val rAxiBId = RegNext(io.axi.b.id)
+    when(rAxiBFire) {
+      cntCmtRespLoc(rAxiBId) := cntCmtRespLoc(rAxiBId) + 1
     }
   }
 

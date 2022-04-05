@@ -19,6 +19,10 @@ class RdmaArb(cnt: Int) extends Component {
   // block the rq
   io.rdmaio.rq.setBlocked()
 
+  // pipe the sq
+  val sqV = Vec(Stream(StreamData(256)), cnt)
+  (sqV, io.rdmaV).zipped.foreach(_ <-/< _.sq)
+
   // mstr interface arb
   // fire sq => fire rd_req => fire axis_src with .last => demux to next
   val strmFifo1, strmFifo2 = StreamFifo(UInt(log2Up(cnt) bits), 32)
@@ -26,7 +30,7 @@ class RdmaArb(cnt: Int) extends Component {
   // val mskSqVld = Vec(Bool(),cnt)
   val mskSqVld = Bits(cnt bits)
   for (i <- mskSqVld.bitsRange)
-    mskSqVld(i) := io.rdmaV(i).sq.valid
+    mskSqVld(i) := sqV(i).valid
 
   // round-robin
   val mskSqSel = cloneOf(mskSqVld)
@@ -37,7 +41,7 @@ class RdmaArb(cnt: Int) extends Component {
   val sqSel = OHToUInt(mskSqSel)
 
   // fire when strmFifo is not full
-  io.rdmaio.sq << StreamMux(sqSel, io.rdmaV.map(_.sq)).continueWhen(strmFifo1.io.availability > 0)
+  io.rdmaio.sq << StreamMux(sqSel, sqV).continueWhen(strmFifo1.io.availability > 0)
 
   strmFifo1.io.push.payload := sqSel
   strmFifo1.io.push.valid := io.rdmaio.sq.fire
