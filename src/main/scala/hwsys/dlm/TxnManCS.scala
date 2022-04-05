@@ -43,7 +43,7 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
    */
   val compLkReq = new StateMachine {
     val CS_TXN = new State with EntryPoint
-    val RD_TXN = new State
+    val RD_TXN_HD, RD_TXN = new State
 
     val curTxnId = Reg(UInt(conf.wTxnId bits)).init(0)
 
@@ -60,24 +60,15 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
       e.payload := txnMemRd.toLkReq(io.nodeId, io.txnManId, curTxnId, False, reqLen)
 
     val mskTxn2Start = ~rReqDone.asBits & ~rAbort.asBits // msk to indicate which txn to start
-    val idxTxn2Start = OHToUInt(OHMasking.first(mskTxn2Start))
+    val rIdxTxn2Start = RegNext(OHToUInt(OHMasking.first(mskTxn2Start))) // stage
 
 
     CS_TXN.whenIsActive {
-      // txn is invalid (all lk reqs have been sent OR txn abort)
-      //      when(rReqDone(curTxnId) || rAbort(curTxnId)) {
-      //        curTxnId := curTxnId + 1
-      //      } otherwise {
-      //        // read the txn hd cmd, will be ready in the next cycle
-      //        txnMemRdCmd.valid := True
-      //        txnMemRdCmd.payload := txnOffs
-      //        txnMemRd.ready := True
-      //      }
-      when(mskTxn2Start.orR) {
-        curTxnId := idxTxn2Start // reg
-        txnMemRdCmd.valid.set()
-        txnMemRdCmd.payload := idxTxn2Start << conf.wMaxTxnLen
-        txnMemRd.ready.set()
+      when(RegNext(mskTxn2Start.orR)) {
+        curTxnId := rIdxTxn2Start // reg
+        txnMemRdCmd.valid := True
+        txnMemRdCmd.payload := rIdxTxn2Start << conf.wMaxTxnLen
+        txnMemRd.ready := True
       }
 
       when(txnMemRd.fire) {
