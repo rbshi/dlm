@@ -78,8 +78,133 @@ class RdmaIO extends Bundle {
     axis_sink.flipDir()
     axis_src.flipDir()
   }
+
+  def tieOff(): Unit = {
+    rd_req.setBlocked()
+    wr_req.setBlocked()
+    rq.setBlocked()
+    sq.setIdle()
+    axis_sink.setBlocked()
+    axis_src.setIdle()
+  }
+
 }
 
+// TCP stack
+case class ListenReqT() extends Bundle {
+  val port = UInt(16 bits)
+}
+
+case class ListenRspT() extends Bundle {
+  val success = UInt(8 bits)
+}
+
+case class OpenReqT() extends Bundle {
+  val ipaddr = UInt(32 bits)
+  val port = UInt(16 bits)
+}
+
+case class OpenRspT() extends Bundle {
+  val sid = UInt(16 bits)
+  val success = UInt(8 bits)
+  val ipaddr = UInt(32 bits)
+  val port = UInt(16 bits)
+}
+
+case class CloseReqT() extends Bundle {
+  val sid = UInt(16 bits)
+}
+
+case class NotifyT() extends Bundle {
+  val sid = UInt(16 bits)
+  val len = UInt(16 bits)
+  val ipaddr = UInt(32 bits)
+  val dstport = UInt(16 bits)
+  val closed = UInt(8 bits)
+}
+
+case class RdPkgT() extends Bundle {
+  val sid = UInt(16 bits)
+  val len = UInt(16 bits)
+}
+
+case class RxMetaT() extends Bundle {
+  val sid = UInt(16 bits)
+}
+
+case class TxMetaT() extends Bundle {
+  val sid = UInt(16 bits)
+  val len = UInt(16 bits)
+}
+
+case class TxStatT() extends Bundle {
+  val sid = UInt(16 bits)
+  val len = UInt(16 bits)
+  val remaining_space = UInt(30 bits)
+  val error = UInt(2 bits)
+}
+
+
+class TcpIO extends Bundle {
+
+//  // general control [:start_server(1b)]
+//  val ctrl = in UInt(32 bits)
+//
+//  // listen port (as the server)
+//  val listen_port = in UInt(32 bits)
+//
+//  // remote server config
+//  val svr_ipaddr = in UInt(32 bits)
+//  val svr_port = in UInt(16 bits)
+
+  // status reg
+  val cntNotif    = out(Reg(UInt(32 bits))).init(0)
+  val cntNotifLen = out(Reg(UInt(32 bits))).init(0)
+  val cntRdPkg    = out(Reg(UInt(32 bits))).init(0)
+  val cntRxMeta   = out(Reg(UInt(32 bits))).init(0)
+  val cntTxMeta   = out(Reg(UInt(32 bits))).init(0)
+  val cntTxStat   = out(Reg(UInt(32 bits))).init(0)
+  val cntSink     = out(Reg(UInt(32 bits))).init(0)
+  val cntSrc      = out(Reg(UInt(32 bits))).init(0)
+
+  val listen_req = master Stream StreamData(ListenReqT().getBitsWidth)
+  val listen_rsp = slave Stream StreamData(ListenRspT().getBitsWidth)
+
+  val open_req   = master Stream StreamData(OpenReqT().getBitsWidth)
+  val open_rsp   = slave Stream StreamData(OpenRspT().getBitsWidth)
+  val close_req  = master Stream StreamData(CloseReqT().getBitsWidth)
+
+  val notif      = slave Stream StreamData(NotifyT().getBitsWidth)     // notify is a member of Object
+  val rd_pkg     = master Stream StreamData(RdPkgT().getBitsWidth)
+  val rx_meta    = slave Stream StreamData(RxMetaT().getBitsWidth)
+
+  val tx_meta    = master Stream StreamData(TxMetaT().getBitsWidth)
+  val tx_stat    = slave Stream StreamData(TxStatT().getBitsWidth)
+
+  val axis_sink  = slave Stream Axi4StreamData(512)
+  val axis_src   = master Stream Axi4StreamData(512)
+
+  def regMap(r: AxiLite4SlaveFactory, baseR: Int): Int = {
+    implicit val baseReg = baseR
+//    val rCtrl = r.rwInPort(ctrl,       r.getAddr(0), 0, "Tcp: ctrl")
+//    when(rCtrl.orR) (rCtrl.clearAll()) // auto clear
+    r.read(cntNotif   , r.getAddr(4) , 0, "Tcp: cntNotif")
+    r.read(cntNotifLen, r.getAddr(5) , 0, "Tcp: cntNotifLen")
+    r.read(cntRdPkg   , r.getAddr(6) , 0, "Tcp: cntRdPkg")
+    r.read(cntRxMeta  , r.getAddr(7) , 0, "Tcp: cntRxMeta")
+    r.read(cntTxMeta  , r.getAddr(8) , 0, "Tcp: cntTxMeta")
+    r.read(cntTxStat  , r.getAddr(9) , 0, "Tcp: cntTxStat")
+    r.read(cntSink    , r.getAddr(10), 0, "Tcp: cntSink")
+    r.read(cntSrc     , r.getAddr(11), 0, "Tcp: cntSrc")
+
+    val assignOffs = 12
+    assignOffs
+  }
+
+}
+
+
+// Bypass
 class HostDataIO extends Bundle {
   // bpss h2c/c2h
   val bpss_rd_req = master Stream StreamData(96)
@@ -88,6 +213,16 @@ class HostDataIO extends Bundle {
   val bpss_wr_done = slave Stream StreamData(6)
   val axis_host_sink = slave Stream BpssData(512)
   val axis_host_src = master Stream BpssData(512)
+
+  def tieOff(): Unit = {
+    bpss_rd_req.setIdle()
+    bpss_wr_req.setIdle()
+    bpss_rd_done.setBlocked()
+    bpss_wr_done.setBlocked()
+    axis_host_sink.setBlocked()
+    axis_host_src.setIdle()
+  }
+
 }
 
 
