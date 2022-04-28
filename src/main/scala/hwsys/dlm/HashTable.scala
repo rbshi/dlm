@@ -76,8 +76,8 @@ class HashTableIO(keyWidth:Int, valWidth:Int, bucketWidth:Int, tableAddrWidth:In
     this.update_data := 0
   }
 
-  def sendCmd(key:UInt, value:UInt, opcode:SpinalEnumElement[HashTableOpCode.type]): Unit ={
-    this.ht_cmd_if.valid := True
+  def setCmd(key:UInt, value:UInt, opcode:HashTableOpCode.E): Unit ={
+    // this.ht_cmd_if.valid := True
     this.ht_cmd_if.key := key
     this.ht_cmd_if.value := value
     this.ht_cmd_if.opcode := opcode

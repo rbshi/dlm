@@ -129,6 +129,10 @@ object Helpers {
 
   }
 
+//  implicit class RegUtils(value: BaseType) {
+//    def inc()
+//  }
+
 
 }
 

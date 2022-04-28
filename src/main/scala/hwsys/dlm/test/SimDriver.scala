@@ -11,7 +11,8 @@ case class TxnEntrySim(
                         nId: Int,
                         cId: Int,
                         tId: Int,
-                        lkAttr: Int,
+                        tabId: Int,
+                        lkType: Int,
                         wLen: Int
                       )(implicit sysConf: SysConfig) extends MemStructSim {
   override def asBytes = SimConversions.txnEntrySimToBytes(this)
@@ -25,8 +26,9 @@ object SimConversions {
     val vBigInt = req.nId +
       (req.cId << (sysConf.wNId)) +
       (req.tId << (sysConf.wNId+sysConf.wCId)) +
-      (req.lkAttr << (sysConf.wNId+sysConf.wCId+sysConf.wTId)) +
-      (req.wLen << (sysConf.wNId+sysConf.wCId+sysConf.wTId+2))
+      (req.tabId << (sysConf.wNId+sysConf.wCId+sysConf.wTId)) +
+      (req.lkType << (sysConf.wNId+sysConf.wCId+sysConf.wTId+sysConf.wTabId)) +
+      (req.wLen << (sysConf.wNId+sysConf.wCId+sysConf.wTId+sysConf.wTabId+sysConf.wLkType))
     MemStructSim.bigIntToBytes(vBigInt, 8)
   }
 
@@ -41,7 +43,7 @@ object SimInit {
       // txnHd
       txnMem = txnMem ++ MemStructSim.bigIntToBytes(BigInt(txnLen), 8)
       for (j <- 0 until txnLen) {
-        txnMem = txnMem ++ TxnEntrySim(fNId(i, j), fCId(i, j), fTId(i, j) + tIdOffs, fLk(i, j), fWLen(i, j)).asBytes
+        txnMem = txnMem ++ TxnEntrySim(fNId(i, j), fCId(i, j), fTId(i, j) + tIdOffs, 0, fLk(i, j), fWLen(i, j)).asBytes
       }
       for (j <- 0 until (txnMaxLen-txnLen))
         txnMem = txnMem ++ MemStructSim.bigIntToBytes(BigInt(0), 8)

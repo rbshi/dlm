@@ -30,8 +30,8 @@ class SendArbiter(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component
 
   val mskWr, mskRdGet = Bits(cntTxnMan bits)
   for (i <- mskWr.bitsRange){
-    mskWr(i) := io.lkReqV(i).lkRelease && io.lkReqV(i).lkType && ~io.lkReqV(i).txnAbt // NOTE: if txn not abt -> wrData
-    mskRdGet(i) := ~io.lkReqV(i).lkRelease && ~io.lkReqV(i).lkType
+    mskWr(i) := io.lkReqV(i).lkRelease && (io.lkReqV(i).lkType===LkT.wr || io.lkReqV(i).lkType===LkT.raw) && ~io.lkReqV(i).txnAbt // NOTE: if txn not abt -> wrData
+    mskRdGet(i) := ~io.lkReqV(i).lkRelease && (io.lkReqV(i).lkType===LkT.rd || io.lkReqV(i).lkType===LkT.raw)
   }
 
   val fsm = new StateMachine {
@@ -113,11 +113,12 @@ class RecvDispatcher(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Compon
     (lkRespV, lkRespBitV).zipped.foreach(_.assignFromBits(_))
 
     val rMskRd = Reg(Bits(cntTxnMan bits)).init(0)
-    val mskRd, mskWrCmt = Bits(cntTxnMan bits)
+    val mskRd, mskRdResp, mskWrCmt = Bits(cntTxnMan bits)
     for (i <- mskRd.bitsRange) {
       // if lockReq of Rd is granted, consume the followup read data
-      mskRd(i) := ~lkRespV(i).lkRelease && ~lkRespV(i).lkType && (lkRespV(i).respType === LockRespType.grant)
-      mskWrCmt(i) := lkRespV(i).lkRelease && lkRespV(i).lkType && ~lkRespV(i).txnAbt
+      mskRd(i) := ~lkRespV(i).lkRelease && (lkRespV(i).lkType===LkT.rd || lkRespV(i).lkType===LkT.raw) && (lkRespV(i).respType === LockRespType.grant)
+      mskRdResp(i) := ~lkRespV(i).lkRelease && (lkRespV(i).lkType===LkT.rd || lkRespV(i).lkType===LkT.raw)
+      mskWrCmt(i) := lkRespV(i).lkRelease && (lkRespV(i).lkType===LkT.wr || lkRespV(i).lkType===LkT.raw) && ~lkRespV(i).txnAbt
     }
 
     io.recvQ.ready := isActive(LKRESP)
@@ -129,7 +130,7 @@ class RecvDispatcher(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Compon
     io.statusVld := isActive(LKRESP)
     io.nResp := U(cntTxnMan).resized
     io.nWrCmtResp := CountOne(mskWrCmt).resized
-    io.nRdGetResp := CountOne(mskRd).resized
+    io.nRdGetResp := CountOne(mskRdResp).resized
 
     LKRESP.whenIsActive {
       when(io.recvQ.fire) {
@@ -208,8 +209,8 @@ class ReqDispatcher(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Compone
     val rMskWr = Reg(Bits(cntTxnMan bits)).init(0)
     val MskWr = Bits(cntTxnMan bits)
     for (i <- MskWr.bitsRange) {
-      // if lockReq of Rd is granted, consume the followup read data
-      MskWr(i) := lkReqV(i).lkRelease && lkReqV(i).lkType && ~lkReqV(i).txnAbt
+      // if lockRlse and not abt, consume the followup read data
+      MskWr(i) := lkReqV(i).lkRelease && (lkReqV(i).lkType===LkT.wr || lkReqV(i).lkType===LkT.raw) && ~lkReqV(i).txnAbt
     }
 
     io.lkReq.valid := False
@@ -295,7 +296,7 @@ class RespArbiter(cntTxnMan: Int)(implicit sysConf: SysConfig) extends Component
 
     LKRESP.whenIsActive {
       // record cntBeat
-      val isRdRespGrant = ~io.lkResp.lkRelease && ~io.lkResp.lkType && (io.lkResp.respType === LockRespType.grant)
+      val isRdRespGrant = ~io.lkResp.lkRelease && (io.lkResp.lkType===LkT.rd || io.lkResp.lkType===LkT.raw) && (io.lkResp.respType === LockRespType.grant)
       when(io.lkResp.fire && isRdRespGrant) {
         cntBeat := cntBeat + (U(1) << io.lkResp.wLen)
       }

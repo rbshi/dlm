@@ -17,10 +17,13 @@ trait SysConfig {
   val nLock : Int
   val nTxnMan : Int
 
+  val nTab: Int = 8 // MAX 8 tables
+
   // derivative params
   def wNId = log2Up(nNode)
   def wCId = log2Up(nCh)
   def wTId = log2Up(nLock)
+  def wTabId: Int = log2Up(nTab)
   def wTxnManId = log2Up(nTxnMan)
 
   def nTxnAgent = nNode -1
@@ -39,8 +42,9 @@ trait SysConfig {
   // LT params
   val nLtPart : Int
 
+  val wLkType = 2
   val wOwnerCnt = 8
-  def wHtValNW = 1 + wOwnerCnt
+  def wHtValNW = 1 + wOwnerCnt // 1-bit lock status (ex/sh)
   val wHtBucket = 8
   def wHtTable = 9 // depth 512: one BRAM
   def wLtPart = log2Up(nLtPart)
@@ -48,7 +52,7 @@ trait SysConfig {
   // FIXME: for sim
   val wChSize = 28 // 256MB of each channel (used as offset with global addressing)
 
-  val wLkAttr = 2
+
   val wTupLenPow = 3 //len(tuple)=2^wLen; maxLen = 64B << 7 = 8192 B
 
   // onFly control
@@ -75,7 +79,8 @@ case class TxnEntry(conf: SysConfig) extends Bundle {
   val nId = UInt(conf.wNId bits)
   val cId = UInt(conf.wCId bits)
   val tId = UInt(conf.wTId bits)
-  val lkAttr = Bits(conf.wLkAttr bits)
+  val tabId = UInt(conf.wTabId bits)
+  val lkType = LkT()
   val wLen = UInt(conf.wTupLenPow bits) // len(tuple)=2^wLen; maxLen = 64B << 7 = 8192 B
 
   def toLkReq(srcNodeId: UInt, txnManId: UInt, curTxnId: UInt, release: Bool, lkIdx: UInt): LkReq = {
@@ -84,8 +89,6 @@ case class TxnEntry(conf: SysConfig) extends Bundle {
     lkReq.snId := srcNodeId
     lkReq.txnManId := txnManId
     lkReq.txnId := curTxnId
-    lkReq.lkType := this.lkAttr(0)
-    lkReq.lkUpgrade := this.lkAttr(1)
     lkReq.lkRelease := release
     lkReq.lkIdx := lkIdx
     lkReq.txnAbt := False
@@ -97,11 +100,11 @@ case class LkReq(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
   val nId = UInt(conf.wNId bits)
   val cId = UInt(conf.wCId bits)
   val tId = if(isTIdTrunc) UInt(conf.wTId - conf.wLtPart bits) else UInt(conf.wTId bits)
+  val tabId = UInt(conf.wTabId bits)
   val snId = UInt(conf.wNId bits) // src node (who issue the txn) Id
   val txnManId = UInt(conf.wTxnManId bits)
   val txnId = UInt(conf.wTxnId bits)
-  val lkType = Bool()
-  val lkUpgrade = Bool()
+  val lkType = LkT()
   val lkRelease = Bool()
   val txnAbt = Bool() // when req wr rlse, if txnAbt, then no data to commit
   val lkIdx = UInt(conf.wLkIdx bits)
@@ -113,11 +116,11 @@ case class LkResp(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
   val nId = UInt(conf.wNId bits)
   val cId = UInt(conf.wCId bits)
   val tId = if(isTIdTrunc) UInt(conf.wTId - conf.wLtPart bits) else UInt(conf.wTId bits)
+  val tabId = UInt(conf.wTabId bits)
   val snId = UInt(conf.wNId bits) // src node (who issue the txn) Id
   val txnManId = UInt(conf.wTxnManId bits)
   val txnId = UInt(conf.wTxnId bits)
-  val lkType = Bool()
-  val lkUpgrade = Bool()
+  val lkType = LkT()
   val lkRelease = Bool()
   val txnAbt = Bool()
   val lkIdx = UInt(conf.wLkIdx bits)
@@ -307,6 +310,11 @@ case class TxnManCSIO(conf: SysConfig) extends Bundle {
       cmdAxi.w.strb.setAll()
     }
   }
+}
+
+// Lock types: Read, Write, ReadAndWrite, insertTab ()
+object LkT extends SpinalEnum {
+  val rd, wr, raw, instTab = newElement()
 }
 
 

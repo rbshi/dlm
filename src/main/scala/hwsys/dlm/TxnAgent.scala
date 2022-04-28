@@ -16,7 +16,7 @@ class TxnAgent(conf: SysConfig) extends Component {
   val lkReqRlseWrFifo = StreamFifo(LkReq(conf, false), 8)
 
   // demux the lkReqQ (if wrRlse, to Fifo, else to ltReq)
-  val isWrReqRlse = lkReqQ.lkRelease && lkReqQ.lkType && ~lkReqQ.txnAbt // NOTE: not abt
+  val isWrReqRlse = lkReqQ.lkRelease && (lkReqQ.lkType===LkT.wr || lkReqQ.lkType===LkT.raw) && ~lkReqQ.txnAbt // NOTE: not abt
   val lkReqQFork, lkReqBpss = cloneOf(lkReqQ)
 
   val lkReqQDmx = StreamDemux(lkReqQ, isWrReqRlse.asUInt, 2)
@@ -62,7 +62,7 @@ class TxnAgent(conf: SysConfig) extends Component {
   io.axi.b.ready.set()
 
   // resp
-  val isRdRespGrant = ~io.ltResp.lkRelease && ~io.ltResp.lkType && (io.ltResp.respType === LockRespType.grant)
+  val isRdRespGrant = ~io.ltResp.lkRelease && (io.ltResp.lkType===LkT.rd || io.ltResp.lkType===LkT.raw) && (io.ltResp.respType === LockRespType.grant)
   io.ltResp.conditionFork2(isRdRespGrant, io.lkResp, io.axi.ar)
   // payload assignment
   // io.axi.ar.addr := (((io.ltResp.tId << io.ltResp.wLen) << 6) + (io.ltResp.cId << conf.wChSize)).resized

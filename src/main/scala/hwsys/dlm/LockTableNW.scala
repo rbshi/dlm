@@ -10,7 +10,7 @@ object LockRespType extends SpinalEnum{
 
 // value of ht
 case class LockEntry(conf: SysConfig) extends Bundle{
-  val lock_status = Bool() // sh, ex
+  val lock_status = Bool() // sh,ex
   val owner_cnt = UInt(conf.wOwnerCnt bits)
 
   def toUInt : UInt = {
@@ -22,14 +22,15 @@ case class RamEntry(conf: SysConfig) extends Bundle{
 
   val net_ptr_val = Bool()
   val next_ptr = UInt(conf.wHtTable bits)
+  val lock_status = Bool() // sh,ex
   val owner_cnt = UInt(conf.wOwnerCnt bits)
-  val lock_status = Bool() // sh, ex
   val key = UInt(conf.wTId-log2Up(conf.nLtPart) bits)
 
   def toUInt : UInt = {
     this.asBits.asUInt
   }
 }
+
 
 class LockTableNW(conf: SysConfig) extends Component {
 
@@ -43,98 +44,95 @@ class LockTableNW(conf: SysConfig) extends Component {
     val INSERT_TRY = new State with EntryPoint
     val INSET_RESP, DEL_CMD, DEL_RESP, LK_RESP = new State
 
-    // stage lock_req
-    val req = RegNextWhen(io.lkReq.payload, io.lkReq.fire)
-    // stage ht out
-    val ht_lock_entry_cast = LockEntry(conf)
-    ht_lock_entry_cast.assignFromBits(ht.io.ht_res_if.found_value.asBits) // wire: cast the value of ht to lock_entry
+    // stage lkReq
+    val rLkReq = RegNextWhen(io.lkReq.payload, io.lkReq.fire)
 
-    val ht_ram_entry_cast = RamEntry(conf)
-    ht_ram_entry_cast.assignFromBits(ht.io.ht_res_if.ram_data.asBits) // BUG, MSB order
+    val htLkEntry = LockEntry(conf)
+    htLkEntry.assignFromBits(ht.io.ht_res_if.found_value.asBits) // cast the value of ht to lock_entry
 
-    val r_lock_resp = Reg(LockRespType())
+    val htRamEntry = RamEntry(conf)
+    htRamEntry.assignFromBits(ht.io.ht_res_if.ram_data.asBits) // BUG, MSB order
 
-    ht.io.ht_res_if.ready := True
-    io.lkReq.ready := False
+    val rLkResp = Reg(LockRespType())
+
+    ht.io.ht_res_if.freeRun()
+    io.lkReq.setBlocked()
+
+    io.lkResp.payload.assignSomeByName(rLkReq)
+    io.lkResp.respType := rLkResp
+    io.lkResp.valid := isActive(LK_RESP)
 
     INSERT_TRY.whenIsActive{
-      val try_onwer_cnt = UInt(conf.wOwnerCnt bits)
-      try_onwer_cnt := 1
-      io.lkReq.ready := ht.io.ht_cmd_if.ready
-      when(io.lkReq.valid){
-        ht.io.sendCmd(io.lkReq.tId, (io.lkReq.lkType ## try_onwer_cnt).asUInt, HashTableOpCode.ins2)
-      }
-
-      when(io.lkReq.fire){
-        goto(INSET_RESP)
-      }
+      val tryLkEntry = LockEntry(conf)
+      tryLkEntry.owner_cnt := 1
+      // exclusive lock if wr/raw
+      tryLkEntry.lock_status := io.lkReq.lkType===LkT.wr || io.lkReq.lkType===LkT.raw
+      ht.io.setCmd(io.lkReq.tId,tryLkEntry.toUInt, HashTableOpCode.ins2)
+      ht.io.ht_cmd_if.arbitrationFrom(io.lkReq)
+      when(io.lkReq.fire)(goto(INSET_RESP))
     }
 
     // HT req -> resp is in sequential
     INSET_RESP.whenIsActive {
       ht.io.update_addr := ht.io.ht_res_if.find_addr
+      val htNewRamEntry = RamEntry(conf)
+      htNewRamEntry.net_ptr_val := htRamEntry.net_ptr_val
+      htNewRamEntry.next_ptr := htRamEntry.next_ptr
+      htNewRamEntry.lock_status := htRamEntry.lock_status
+      htNewRamEntry.key := htRamEntry.key
+      htNewRamEntry.owner_cnt := rLkReq.lkRelease ? (htRamEntry.owner_cnt-1) | (htRamEntry.owner_cnt+1)
+      ht.io.update_data := htNewRamEntry.asBits.asUInt
+
       when(ht.io.ht_res_if.fire) {
-
-        switch(req.lkRelease){
+        switch(rLkReq.lkRelease){
           is(False) {
-            ht.io.update_data := (ht_ram_entry_cast.key ## req.lkType ## (ht_ram_entry_cast.owner_cnt+1) ## ht_ram_entry_cast.next_ptr ## ht_ram_entry_cast.net_ptr_val).asUInt
-
             switch(ht.io.ht_res_if.rescode) {
               is(HashTableRetCode.ins_exist) {
                 // lock exist
-                when((!req.lkUpgrade && (ht_lock_entry_cast.lock_status | req.lkType)) || (req.lkUpgrade && ht_lock_entry_cast.owner_cnt > 1)) {
-                  r_lock_resp := LockRespType.abort // no wait
-                  goto(LK_RESP)
+                when(htLkEntry.lock_status || (rLkReq.lkType === LkT.wr || rLkReq.lkType === LkT.raw)) {
+                  rLkResp := LockRespType.abort
                 } otherwise {
-                  r_lock_resp := LockRespType.grant
+                  rLkResp := LockRespType.grant
                   // write back to ht data ram
                   ht.io.update_en := True
-                  goto(LK_RESP)
                 }
               }
               // no space
               is(HashTableRetCode.ins_fail) {
-                r_lock_resp := LockRespType.abort // no wait
-                goto(LK_RESP)
+                rLkResp := LockRespType.abort // no wait
               }
               // insert_success
               default {
-                r_lock_resp := LockRespType.grant
-                goto(LK_RESP)
+                rLkResp := LockRespType.grant
               }
             }
+            goto(LK_RESP)
           }
 
           is(True){
-            ht.io.update_data := (ht_ram_entry_cast.key ## req.lkType ## (ht_ram_entry_cast.owner_cnt-1) ## ht_ram_entry_cast.next_ptr ## ht_ram_entry_cast.net_ptr_val).asUInt
-
             // lock release, ht.io.ht_res_if.rescode must be ins_exist. 2 cases: cnt-- or del entry (cost a few cycles)
-            when(ht_ram_entry_cast.owner_cnt===1){
+            when(htRamEntry.owner_cnt===1){
               // ht must be ready, del the entry: BUG
               goto(DEL_CMD)
             } otherwise {
               ht.io.update_en := True
               goto(LK_RESP)
             }
-            r_lock_resp := LockRespType.release
+            rLkResp := LockRespType.release
           }
         }
-
       }
     }
 
     DEL_CMD.whenIsActive{
-      ht.io.sendCmd(req.tId, 0, HashTableOpCode.del)
+      ht.io.setCmd(rLkReq.tId, 0, HashTableOpCode.del)
+      ht.io.ht_cmd_if.valid.set()
       when(ht.io.ht_cmd_if.fire){goto(DEL_RESP)}
     }
 
     DEL_RESP.whenIsActive{
       when(ht.io.ht_res_if.fire){goto(LK_RESP)}
     }
-
-    io.lkResp.payload.assignSomeByName(req)
-    io.lkResp.respType := r_lock_resp
-    io.lkResp.valid := isActive(LK_RESP)
 
     LK_RESP.whenIsActive{
       when(io.lkResp.fire){goto(INSERT_TRY)}

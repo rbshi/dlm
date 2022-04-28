@@ -94,7 +94,8 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
           is(True)(cntLkReqLoc(curTxnId) := cntLkReqLoc(curTxnId) + 1)
           is(False)(cntLkReqRmt(curTxnId) := cntLkReqRmt(curTxnId) + 1)
         }
-        when(txnMemRd.lkAttr(0)) {
+        // req wr lock
+        when((txnMemRd.lkType === LkT.wr) || (txnMemRd.lkType === LkT.raw)) {
           switch(isLocal) {
             is(True) {
               txnWrMemLoc.write(txnOffs + cntLkReqWrLoc(curTxnId), txnMemRd.payload)
@@ -162,7 +163,7 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
 
     WAIT_RESP.whenIsActive {
       when(io.lkRespLoc.fire) {
-
+        // lock req
         when(io.lkRespLoc.respType === LockRespType.grant) {
           // note: ooo arrive
           // should use lkHold as wr address
@@ -172,11 +173,14 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
           cntLkRespLoc(curTxnId) := cntLkRespLoc(curTxnId) + 1
           cntLkHoldLoc(curTxnId) := cntLkHoldLoc(curTxnId) + 1
 
-          when(io.lkRespLoc.lkType) {
-            cntLkHoldWrLoc(curTxnId) := cntLkHoldWrLoc(curTxnId) + 1
-          } otherwise {
-            // issue local rd req once get the lock
-            goto(LOCAL_RD_REQ)
+          switch(io.lkRespLoc.lkType) {
+            is(LkT.rd) (goto(LOCAL_RD_REQ))
+            is(LkT.wr) (cntLkHoldWrLoc(curTxnId) := cntLkHoldWrLoc(curTxnId) + 1)
+            is(LkT.raw) {
+              cntLkHoldWrLoc(curTxnId) := cntLkHoldWrLoc(curTxnId) + 1
+              goto(LOCAL_RD_REQ) // issue local rd req once get the lock
+            }
+            is(LkT.instTab) ()
           }
         }
 
@@ -249,11 +253,14 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
           cntLkRespRmt(curTxnId) := cntLkRespRmt(curTxnId) + 1
           cntLkHoldRmt(curTxnId) := cntLkHoldRmt(curTxnId) + 1
 
-          when(io.lkRespRmt.lkType) {
-            // FIXME: not used
-            cntLkHoldWrRmt(curTxnId) := cntLkHoldWrRmt(curTxnId) + 1
-          } otherwise {
-            goto(RMT_RD_CONSUME)
+          switch(io.lkRespRmt.lkType) {
+            is(LkT.rd) (goto(RMT_RD_CONSUME))
+            is(LkT.wr) (cntLkHoldWrRmt(curTxnId) := cntLkHoldWrRmt(curTxnId) + 1)
+            is(LkT.raw) {
+              cntLkHoldWrRmt(curTxnId) := cntLkHoldWrRmt(curTxnId) + 1
+              goto(RMT_RD_CONSUME) // issue local rd req once get the lock
+            }
+            is(LkT.instTab) ()
           }
         }
 
@@ -410,7 +417,7 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
         cntRlseReqLoc(curTxnId) := cntRlseReqLoc(curTxnId) + 1
         goto(CS_TXN)
       }
-      when(lkReqRlseLoc.fire && lkItem.lkType) {
+      when(lkReqRlseLoc.fire && (lkItem.lkType === LkT.wr || lkItem.lkType === LkT.raw)) {
         cntRlseReqWrLoc(curTxnId) := cntRlseReqWrLoc(curTxnId) + 1
       }
     }
@@ -456,7 +463,7 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
         // cntRlseReqRmt(curTxnId) := cntRlseReqRmt(curTxnId) + 1
 
         // when wr lock & ~rAbort
-        when(lkItem.lkType && ~rAbort(curTxnId)) {
+        when((lkItem.lkType === LkT.wr || lkItem.lkType === LkT.raw) && ~rAbort(curTxnId)) {
           cntRlseReqWrRmt(curTxnId) := cntRlseReqWrRmt(curTxnId) + 1 // no use
           goto(RMT_WR)
         } otherwise {

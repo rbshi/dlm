@@ -59,7 +59,7 @@ object OneNodeSim {
       dut
     }.doSim("onenode", 99) { dut =>
       // params
-      val txnLen = 32
+      val txnLen = 8
       val txnCnt = 128
       val txnMaxLen = sysConf.maxTxnLen-1
 
@@ -71,8 +71,8 @@ object OneNodeSim {
       // cmd memory
       val fNId = (i: Int, j: Int) => 0
       val fCId = (i: Int, j: Int) => 0
-      val fTId = (i: Int, j: Int) => i + j
-      val fLkAttr = (i: Int, j: Int) => 1
+      val fTId = (i: Int, j: Int) => i * txnLen + j
+      val fLkAttr = (i: Int, j: Int) => 2 // raw
       val fWLen = (i: Int, j: Int) => 0
 
 
