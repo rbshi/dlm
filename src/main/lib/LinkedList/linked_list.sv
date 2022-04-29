@@ -386,7 +386,7 @@ assign clear_ram_done_o = clear_ram_flag && ( clear_addr == '1 );
 ll_true_dual_port_ram_single_clock #( 
   .DATA_WIDTH                             ( D_WIDTH           ), 
   .ADDR_WIDTH                             ( A_WIDTH           ), 
-  .REGISTER_OUT                           ( 1                 )
+  .REGISTER_OUT                           ( RAM_LATENCY -1    )
 ) data_ram (
   .clk                                    ( clk_i             ),
 

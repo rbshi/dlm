@@ -8,7 +8,7 @@
 // True Dual Port RAM with single clock
 
 module ll_true_dual_port_ram_single_clock
-#(parameter DATA_WIDTH=8, parameter ADDR_WIDTH=6, parameter REGISTER_OUT = 1)
+#(parameter DATA_WIDTH=8, parameter ADDR_WIDTH=6, parameter REGISTER_OUT = 0)
 (
         input clk,       
 	input [(DATA_WIDTH-1):0] data_a, data_b,

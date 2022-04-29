@@ -67,7 +67,7 @@ class LockTableNW(conf: SysConfig) extends Component {
       tryLkEntry.owner_cnt := 1
       // exclusive lock if wr/raw
       tryLkEntry.lock_status := io.lkReq.lkType===LkT.wr || io.lkReq.lkType===LkT.raw
-      ht.io.setCmd(io.lkReq.tId,tryLkEntry.toUInt, HashTableOpCode.ins2)
+      ht.io.setCmd(io.lkReq.tId,tryLkEntry.toUInt, HTOp.ins2)
       ht.io.ht_cmd_if.arbitrationFrom(io.lkReq)
       when(io.lkReq.fire)(goto(INSET_RESP))
     }
@@ -87,7 +87,7 @@ class LockTableNW(conf: SysConfig) extends Component {
         switch(rLkReq.lkRelease){
           is(False) {
             switch(ht.io.ht_res_if.rescode) {
-              is(HashTableRetCode.ins_exist) {
+              is(HTRet.ins_exist) {
                 // lock exist
                 when(htLkEntry.lock_status || (rLkReq.lkType === LkT.wr || rLkReq.lkType === LkT.raw)) {
                   rLkResp := LockRespType.abort
@@ -98,7 +98,7 @@ class LockTableNW(conf: SysConfig) extends Component {
                 }
               }
               // no space
-              is(HashTableRetCode.ins_fail) {
+              is(HTRet.ins_fail) {
                 rLkResp := LockRespType.abort // no wait
               }
               // insert_success
@@ -125,7 +125,7 @@ class LockTableNW(conf: SysConfig) extends Component {
     }
 
     DEL_CMD.whenIsActive{
-      ht.io.setCmd(rLkReq.tId, 0, HashTableOpCode.del)
+      ht.io.setCmd(rLkReq.tId, 0, HTOp.del)
       ht.io.ht_cmd_if.valid.set()
       when(ht.io.ht_cmd_if.fire){goto(DEL_RESP)}
     }
