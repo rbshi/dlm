@@ -314,7 +314,7 @@ case class TxnManCSIO(conf: SysConfig) extends Bundle {
 
 // Lock types: Read, Write, ReadAndWrite, insertTab ()
 object LkT extends SpinalEnum {
-  val rd, wr, raw, instTab = newElement()
+  val rd, wr, raw, insTab = newElement()
 }
 
 

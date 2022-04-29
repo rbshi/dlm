@@ -48,7 +48,7 @@ object WrapNodeNetSim {
           val fNId = (i: Int, j: Int) => (idx+1)%2
           val fCId = (i: Int, j: Int) => 0
           // for different txnMan, there'll be a tIdOffs in txnEntrySimInt
-          val fTId = (i: Int, j: Int) => i + j
+          val fTId = (i: Int, j: Int) => i * txnLen + j
           val fLkAttr = (i: Int, j: Int) => 2
           val fWLen = (i: Int, j: Int) => 0
           val txnCtx = SimInit.txnEntrySimInt(txnCnt, txnLen, txnMaxLen, 0)(fNId, fCId, fTId, fLkAttr, fWLen).toArray

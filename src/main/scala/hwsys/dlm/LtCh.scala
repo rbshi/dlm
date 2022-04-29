@@ -8,10 +8,32 @@ class LtCh(sysConf: SysConfig) extends Component{
   val io = LockTableIO(sysConf)
   val ltAry = Array.fill(sysConf.nLtPart)(new LockTableNW(sysConf))
 
+  // each channel has multiple tables, tuplue pointer is used for insert tab
+  val tupPtr = Vec(Reg(UInt(sysConf.wTId bits)).init(0), sysConf.nTab)
+
+  // demux io.lkReq -> lkReqInsTab , lkReqTup
+  val lkReqDemux = StreamDemux(io.lkReq, (io.lkReq.lkType===LkT.insTab) ? U(1) | U(0), 2) // p0: normal req; p1: insTab
+  val lkReqInsTab = lkReqDemux(1)
+  val lkReqTup = lkReqDemux(0)
+
+  // resp of lkReqInsTab
+  val lkRespInsTab, lkRespTup = cloneOf(io.lkResp)
+  lkRespInsTab.translateFrom(lkReqInsTab)((a, b) => {
+    a.assignSomeByName(b)
+    a.respType := LockRespType.grant
+    a.tId.allowOverride
+    a.tId := tupPtr(b.tabId) //
+  })
+
+  // increase the tupPtr
+  when(lkRespInsTab.fire) {
+    tupPtr(lkRespInsTab.payload.tabId) := tupPtr(lkRespInsTab.payload.tabId) + lkReqInsTab.payload.tId
+  }
+
   // use the LSB bits for lkReq dispatching
   val lkReq2Lt = Stream(LkReq(sysConf, true))
 
-  lkReq2Lt.arbitrationFrom(io.lkReq)
+  lkReq2Lt.arbitrationFrom(lkReqTup)
   for ((name, elem) <- lkReq2Lt.payload.elements){
     if (name != "tId") elem := io.lkReq.payload.find(name)
   }
@@ -25,11 +47,14 @@ class LtCh(sysConf: SysConfig) extends Component{
   val lkRespArb = StreamArbiterFactory.roundRobin.build(LkResp(sysConf, true), sysConf.nLtPart)
   (lkRespArb.io.inputs, ltAry).zipped.foreach(_ <-/< _.io.lkResp)
 
-  io.lkResp.arbitrationFrom(lkRespArb.io.output)
-  for ((name, elem) <- io.lkResp.payload.elements){
+
+  lkRespTup.arbitrationFrom(lkRespArb.io.output)
+  for ((name, elem) <- lkRespTup.payload.elements){
     if (name != "tId") elem := lkRespArb.io.output.payload.find(name)
   }
-  io.lkResp.tId := (lkRespArb.io.output.tId ## lkRespArb.io.chosen).asUInt.resized
+  lkRespTup.tId := (lkRespArb.io.output.tId ## lkRespArb.io.chosen).asUInt.resized
+
+  io.lkResp << StreamArbiterFactory.roundRobin.on(Seq(lkRespInsTab, lkRespTup))
 }
 
 class LtTop(sysConf: SysConfig) extends Component {

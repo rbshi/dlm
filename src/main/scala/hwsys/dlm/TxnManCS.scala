@@ -171,7 +171,10 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
 
           // NOTE:
           cntLkRespLoc(curTxnId) := cntLkRespLoc(curTxnId) + 1
-          cntLkHoldLoc(curTxnId) := cntLkHoldLoc(curTxnId) + 1
+          // do not release lk for insTab
+          when(io.lkRespLoc.lkType =/= LkT.insTab){
+            cntLkHoldLoc(curTxnId) := cntLkHoldLoc(curTxnId) + 1
+          }
 
           switch(io.lkRespLoc.lkType) {
             is(LkT.rd) (goto(LOCAL_RD_REQ))
@@ -180,7 +183,7 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
               cntLkHoldWrLoc(curTxnId) := cntLkHoldWrLoc(curTxnId) + 1
               goto(LOCAL_RD_REQ) // issue local rd req once get the lock
             }
-            is(LkT.instTab) ()
+            is(LkT.insTab) ()
           }
         }
 
@@ -251,7 +254,10 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
           lkMemRmt.write(txnOffs + cntLkHoldRmt(curTxnId), io.lkRespRmt.payload)
 
           cntLkRespRmt(curTxnId) := cntLkRespRmt(curTxnId) + 1
-          cntLkHoldRmt(curTxnId) := cntLkHoldRmt(curTxnId) + 1
+
+          when(io.lkRespRmt.lkType =/= LkT.insTab){
+            cntLkHoldRmt(curTxnId) := cntLkHoldRmt(curTxnId) + 1
+          }
 
           switch(io.lkRespRmt.lkType) {
             is(LkT.rd) (goto(RMT_RD_CONSUME))
@@ -260,7 +266,7 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
               cntLkHoldWrRmt(curTxnId) := cntLkHoldWrRmt(curTxnId) + 1
               goto(RMT_RD_CONSUME) // issue local rd req once get the lock
             }
-            is(LkT.instTab) ()
+            is(LkT.insTab) ()
           }
         }
 

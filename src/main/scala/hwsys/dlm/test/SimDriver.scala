@@ -42,7 +42,9 @@ object SimInit {
     for (i <- 0 until txnCnt) {
       // txnHd
       txnMem = txnMem ++ MemStructSim.bigIntToBytes(BigInt(txnLen), 8)
-      for (j <- 0 until txnLen) {
+      // lkInsTab
+      txnMem = txnMem ++ TxnEntrySim(fNId(i, 0), fCId(i, 0), fTId(i, 0) + tIdOffs, 0, 3, fWLen(i, 0)).asBytes
+      for (j <- 0 until txnLen-1) {
         txnMem = txnMem ++ TxnEntrySim(fNId(i, j), fCId(i, j), fTId(i, j) + tIdOffs, 0, fLk(i, j), fWLen(i, j)).asBytes
       }
       for (j <- 0 until (txnMaxLen-txnLen))
