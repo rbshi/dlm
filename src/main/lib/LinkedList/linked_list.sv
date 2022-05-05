@@ -38,6 +38,7 @@ module linked_list_top(
   ll_ht_pdata_t         ll_cmd_if;
   ll_ht_res_if          ll_res_if(.clk (clk_i));
   ll_head_table_if      ll_head_table_if(.clk (clk_i));
+  ll_head_table_if      ll_head_table_if_d(.clk (clk_i));
 
   assign ll_cmd_if.cmd.key = ll_cmd_if_key;
   assign ll_cmd_if.cmd.opcode = ll_cmd_if_opcode;
@@ -52,9 +53,23 @@ module linked_list_top(
   assign ll_res_if_rescode = ll_res_if.result.rescode;
   assign ll_res_if_chain_state = ll_res_if.result.chain_state;
 
-  assign head_table_if_wr_data_ptr = ll_head_table_if.wr_data_ptr;
-  assign head_table_if_wr_data_ptr_val = ll_head_table_if.wr_data_ptr_val;
-  assign head_table_if_wr_en = ll_head_table_if.wr_en;    
+  assign head_table_if_wr_data_ptr = ll_head_table_if_d.wr_data_ptr;
+  assign head_table_if_wr_data_ptr_val = ll_head_table_if_d.wr_data_ptr_val;
+  assign head_table_if_wr_en = ll_head_table_if_d.wr_en;
+
+
+// delay the ll_head_table_if 1 clk to keep it synchronized with ll_res_if
+always_ff @( posedge clk_i or posedge rst_i ) begin
+  if( rst_i ) begin
+    ll_head_table_if_d.wr_data_ptr <= '0;
+    ll_head_table_if_d.wr_data_ptr_val <= '0;
+    ll_head_table_if_d.wr_en <= '0;
+  end else begin
+    ll_head_table_if_d.wr_data_ptr <= ll_head_table_if.wr_data_ptr;
+    ll_head_table_if_d.wr_data_ptr_val <= ll_head_table_if.wr_data_ptr_val;
+    ll_head_table_if_d.wr_en <= ll_head_table_if.wr_en;
+  end
+end
 
 
 localparam D_WIDTH     = $bits( ll_ram_data_t );
@@ -89,8 +104,11 @@ logic       [A_WIDTH-1:0] empty_addr;
 logic                     empty_addr_val;
 logic                     empty_addr_rd_ack;
 
-logic       [A_WIDTH-1:0] add_empty_ptr;
-logic                     add_empty_ptr_en;
+logic       [A_WIDTH-1:0] add_empty_ptr [DIR_CNT-1:0];
+logic                     add_empty_ptr_en [DIR_CNT-1:0];
+
+logic       [A_WIDTH-1:0] add_empty_ptr_o;
+logic                     add_empty_ptr_en_o;
 
 ll_ht_pdata_t           task_w;
 logic                task_valid       [DIR_CNT-1:0];
@@ -167,8 +185,8 @@ ll_data_table_delete #(
   .wr_en_o                                ( wr_en_w          [DELETE_]      ),
     
     // to empty pointer storage
-  .add_empty_ptr_o                        ( add_empty_ptr                   ),
-  .add_empty_ptr_en_o                     ( add_empty_ptr_en                ),
+  .add_empty_ptr_o                        ( add_empty_ptr    [DELETE_]      ),
+  .add_empty_ptr_en_o                     ( add_empty_ptr_en [DELETE_]      ),
 
   .ll_head_table_if                          ( head_table_delete_if            ),
 
@@ -199,8 +217,8 @@ ll_data_table_dequeue #(
   .wr_en_o                                ( wr_en_w          [DEQUEUE_]      ),
     
     // to empty pointer storage
-  .add_empty_ptr_o                        ( add_empty_ptr                   ),
-  .add_empty_ptr_en_o                     ( add_empty_ptr_en                ),
+  .add_empty_ptr_o                        ( add_empty_ptr    [DEQUEUE_]      ),
+  .add_empty_ptr_en_o                     ( add_empty_ptr_en [DEQUEUE_]      ),
 
   .ll_head_table_if                          ( head_table_dequeue_if            ),
 
@@ -271,6 +289,7 @@ always_comb
 // ******* MUX to RAM *******
 logic [DIR_CNT_WIDTH-1:0] rd_sel;
 logic [DIR_CNT_WIDTH-1:0] wr_sel;
+logic [DIR_CNT_WIDTH-1:0] add_empty_sel;
 
 always_comb
   begin
@@ -294,12 +313,27 @@ always_comb
       end
   end
 
+always_comb
+  begin
+    add_empty_sel = '0;
+
+    for( int i = 0; i < DIR_CNT; i++ )
+      begin
+        if( add_empty_sel[i] )
+          add_empty_sel = i[DIR_CNT_WIDTH-1:0];
+      end
+  end
+
 assign ram_rd_addr = rd_addr_w [ rd_sel ];
 assign ram_rd_en   = rd_en_w   [ rd_sel ];
 
 assign ram_wr_addr = wr_addr_w [ wr_sel ];
 assign ram_wr_data = wr_data_w [ wr_sel ];
 assign ram_wr_en   = wr_en_w   [ wr_sel ];  
+
+assign add_empty_ptr_o = add_empty_ptr [ add_empty_sel ];
+assign add_empty_ptr_en_o = add_empty_ptr_en [ add_empty_sel ];
+
 
 // ******* MUX to head_table *******
 always_comb
@@ -343,8 +377,8 @@ ll_empty_ptr_storage #(
   .clk_i                                  ( clk_i             ),
   .rst_i                                  ( rst_i             ),
     
-  .add_empty_ptr_i                        ( add_empty_ptr     ),
-  .add_empty_ptr_en_i                     ( add_empty_ptr_en  ),
+  .add_empty_ptr_i                        ( add_empty_ptr_o     ),
+  .add_empty_ptr_en_i                     ( add_empty_ptr_en_o  ),
     
   .next_empty_ptr_rd_ack_i                ( empty_addr_rd_ack ),
   .next_empty_ptr_o                       ( empty_addr        ),

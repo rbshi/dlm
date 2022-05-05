@@ -28,6 +28,9 @@ trait SysConfig {
 
   def nTxnAgent = nNode -1
 
+  // CC mode
+  def ccProt = "BW"
+
   // txnMan params
   val nTxnCS = 64 // concurrent txn count, limited by axi arid (6 bits)
   val maxTxnLen = 64 // max len of each txn, space of on-chip mem (include the txnHd)
@@ -44,10 +47,14 @@ trait SysConfig {
 
   val wLkType = 2
   val wOwnerCnt = 8
-  def wHtValNW = 1 + wOwnerCnt // 1-bit lock status (ex/sh)
+  val wWaitCnt = 8
   val wHtBucket = 8
   def wHtTable = 9 // depth 512: one BRAM
+  def wLlTable = 9 // depth of LL
   def wLtPart = log2Up(nLtPart)
+
+  def wHtValNW = 1 + wOwnerCnt // 1-bit lock status (ex/sh)
+  def wHtValBW = 1 + wOwnerCnt + wLlTable + 1 // 1-bit lock status (ex/sh)
 
   // FIXME: for sim
   val wChSize = 28 // 256MB of each channel (used as offset with global addressing)
@@ -106,6 +113,7 @@ case class LkReq(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
   val txnId = UInt(conf.wTxnId bits)
   val lkType = LkT()
   val lkRelease = Bool()
+  val txnTimeOut = (conf.ccProt=="BW") generate(Bool())
   val txnAbt = Bool() // when req wr rlse, if txnAbt, then no data to commit
   val lkIdx = UInt(conf.wLkIdx bits)
   val wLen = UInt(conf.wTupLenPow bits)

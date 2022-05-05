@@ -55,7 +55,7 @@ class LockTableNW(conf: SysConfig) extends Component {
 
     val rLkResp = Reg(LockRespType())
 
-    ht.io.ht_res_if.freeRun()
+    // ht.io.ht_res_if.freeRun()
     io.lkReq.setBlocked()
 
     io.lkResp.payload.assignSomeByName(rLkReq)

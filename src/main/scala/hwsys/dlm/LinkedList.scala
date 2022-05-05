@@ -45,17 +45,16 @@ class LinkedListIO(keyWidth:Int, tableAddrWidth:Int) extends Bundle{
   val clear_ram_done_o = out Bool()
 
   def setDefault() = {
-    ll_cmd_if.valid := False
-    ll_cmd_if.key := 0
-    ll_cmd_if.opcode := LLOp.ins
-    ll_cmd_if.head_ptr := 0
-    ll_cmd_if.head_ptr_val := False
-    ll_res_if.ready := False
-    clear_ram_run_i := False
+    this.ll_cmd_if.valid := False
+    this.ll_cmd_if.key := 0
+    this.ll_cmd_if.opcode := LLOp.ins
+    this.ll_cmd_if.head_ptr := 0
+    this.ll_cmd_if.head_ptr_val := False
+    this.ll_res_if.ready := True
+    this.clear_ram_run_i := False
   }
 
-  def sendCmd(key:UInt, opcode:SpinalEnumElement[LLOp.type], head_ptr:UInt, head_ptr_val:Bool): Unit ={
-    ll_cmd_if.valid := True
+  def setCmd(key:UInt, opcode:SpinalEnumElement[LLOp.type], head_ptr:UInt, head_ptr_val:Bool): Unit = {
     ll_cmd_if.key := key
     ll_cmd_if.opcode := opcode
     ll_cmd_if.head_ptr := head_ptr
@@ -93,8 +92,8 @@ class linked_list_top(keyWidth:Int, tableAddrWidth:Int) extends BlackBox with Re
        |// This is an auto-generated file.
        |package linked_list;
        |
-       |  parameter LL_KEY_WIDTH        = 9;
-       |  parameter LL_TABLE_ADDR_WIDTH = 10;
+       |  parameter LL_KEY_WIDTH        = $keyWidth;
+       |  parameter LL_TABLE_ADDR_WIDTH = $tableAddrWidth;
        |  parameter LL_HEAD_PTR_WIDTH   = LL_TABLE_ADDR_WIDTH;
        |
        |  typedef enum {

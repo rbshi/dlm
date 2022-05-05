@@ -99,6 +99,7 @@ logic                   key_match;
 logic                   got_tail;
 logic [A_WIDTH-1:0]     rd_addr;
 logic [A_WIDTH-1:0]     rd_addr_d1;
+logic [VALUE_WIDTH-1:0] found_value;
 
 logic                   rd_data_val;
 logic                   rd_data_val_d1;
@@ -310,11 +311,19 @@ always_ff @( posedge clk_i or posedge rst_i )
       end
 
 
+always_ff @( posedge clk_i or posedge rst_i )
+  if( rst_i )
+    found_value <= '0;
+  else
+    if( rd_data_val && ( next_state == KEY_MATCH_S ) )
+      found_value <= rd_data_i.value;
+
+
 always_comb
   begin
     result_o.cmd         = task_locked.cmd;
     result_o.bucket      = task_locked.bucket;
-    result_o.found_value = '0;
+    result_o.found_value = found_value;
     result_o.chain_state = chain_state;
 
     // for INSERT_FIND_SAMEKEY
