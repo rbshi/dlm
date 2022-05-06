@@ -313,13 +313,15 @@ always_comb
       end
   end
 
+assign add_empty_ptr_en [INSERT_] = '0;
+
 always_comb
   begin
     add_empty_sel = '0;
 
     for( int i = 0; i < DIR_CNT; i++ )
       begin
-        if( add_empty_sel[i] )
+        if( add_empty_ptr_en[i] )
           add_empty_sel = i[DIR_CNT_WIDTH-1:0];
       end
   end

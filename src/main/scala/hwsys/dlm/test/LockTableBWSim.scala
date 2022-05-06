@@ -32,14 +32,21 @@ object LockTableBWSim {
 
       var reqQ  = scala.collection.mutable.Queue.empty[(Int, Int, Int, Int, Int, Int, Int, LkT.E, Boolean, Boolean, Boolean, Int, Int)]
       val lkReq = fork {
-        for (k <- 0 until 8) {
+        for (k <- 0 until 16)
           reqQ += ((0, 0, k%4, 0, 0, 0, 0, LkT.wr, false, false, false, k, 0)) // lkGet
-        }
-        for (k <- 0 until 8) {
-          reqQ += ((0, 0, k%4, 0, 0, 0, 0, LkT.wr, true, false, false, k, 0)) // lkRlse
-        }
+//        for (k <- 0 until 16)
+//          reqQ += ((0, 0, k%4, 0, 0, 0, 0, LkT.wr, true, false, false, k, 0)) // lkRlse
+        // timeout release
+        for (k <- 4 until 16)
+          reqQ += ((0, 0, k%4, 0, 0, 0, 0, LkT.wr, true, true, false, k, 0)) // lkRlse, timeout
+
+//        for (k <- 16 until 32)
+//          reqQ += ((0, 0, k%4, 0, 0, 0, 0, LkT.wr, false, false, false, k, 0)) // lkGet
+//        for (k <- 16 until 32)
+//          reqQ += ((0, 0, k%4, 0, 0, 0, 0, LkT.wr, true, false, false, k, 0)) // lkRlse
 
         sendCmd()
+        dut.clockDomain.waitSampling(100)
 
         def sendCmd(): Unit = {
           while (reqQ.nonEmpty) {

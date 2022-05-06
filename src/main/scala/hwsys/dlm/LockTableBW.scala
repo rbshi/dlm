@@ -219,7 +219,14 @@ class LockTableBW(conf: SysConfig) extends Component {
     }
 
     LLDELCMD.whenIsActive {
-      ll.io.setCmd(rLkReq.asBits.asUInt, LLOp.del, rHtRamEntry.waitQPtr, rHtRamEntry.waitQPtrVld)
+      val oriLkReq = cloneOf(rLkReq)
+      oriLkReq.assignSomeByName(rLkReq)
+      Seq(oriLkReq.lkRelease, oriLkReq.txnTimeOut, oriLkReq.txnAbt).foreach { i =>
+        i.allowOverride
+        i := False
+      }
+
+      ll.io.setCmd(oriLkReq.asBits.asUInt, LLOp.del, rHtRamEntry.waitQPtr, rHtRamEntry.waitQPtrVld)
       ll.io.ll_cmd_if.valid := True
       when(ll.io.ll_cmd_if.fire) (goto(LLDELRESP))
     }
@@ -234,11 +241,14 @@ class LockTableBW(conf: SysConfig) extends Component {
       ht.io.update_addr := rHtRamAddr
 
       when(ll.io.ll_res_if.fire) {
+        // case: LLDEL success
         // update htRamEntry
         ht.io.update_en := ll.io.head_table_if.wr_en
         // lkResp
         rLkResp := LockRespType.release
         goto(LKRESP)
+
+        // TODO: LLDEL fail (already poped to current lock)
       }
     }
 
