@@ -179,7 +179,9 @@ class LockTableBW(conf: SysConfig) extends Component {
       when(ll.io.ll_res_if.fire) {
         when(ll.io.ll_res_if.rescode === LLRet.ins_success) {
           ht.io.update_en := ll.io.head_table_if.wr_en  // update htRamEntry
-          goto(HTINSCMD) // no lkResp
+          rLkResp := LockRespType.waiting // lkResp wait if queue
+          goto(LKRESP)
+          // goto(HTINSCMD) // no lkResp if queue
         } otherwise {
           // if ll.ins failed (not enough space)
           rLkResp := LockRespType.abort
