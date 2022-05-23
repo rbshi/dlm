@@ -47,7 +47,7 @@ object OneNodeSim {
 
     implicit val sysConf = new SysConfig {
       override val nNode: Int = 1
-      override val nCh: Int = 4
+      override val nCh: Int = 1
       override val nTxnMan: Int = 1
       override val nLtPart: Int = 1
       override val nLock: Int = 4096 * nLtPart
@@ -71,7 +71,7 @@ object OneNodeSim {
       // cmd memory
       val fNId = (i: Int, j: Int) => 0
       val fCId = (i: Int, j: Int) => 0
-      val fTId = (i: Int, j: Int) => i * txnLen + j
+      val fTId = (i: Int, j: Int) => j
       val fLkAttr = (i: Int, j: Int) => 2 // raw
       val fWLen = (i: Int, j: Int) => 0
 

@@ -4,7 +4,6 @@ import spinal.core._
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.amba4.axilite.AxiLite4SlaveFactory
 import spinal.lib._
-
 import hwsys.coyote._
 import hwsys.util.Helpers._
 
@@ -28,12 +27,14 @@ trait SysConfig {
 
   def nTxnAgent = nNode -1
 
-  // CC mode
+  // CC mode: "NW", "BW"
   def ccProt = "BW"
 
   // txnMan params
   val nTxnCS = 64 // concurrent txn count, limited by axi arid (6 bits)
   val maxTxnLen = 64 // max len of each txn, space of on-chip mem (include the txnHd)
+
+  val wTimeOut = 24
 
   def wMaxTxnLen= log2Up(maxTxnLen)
   def wLkIdx = log2Up(maxTxnLen) // lkIdx in one Txn, for OoO response
@@ -99,6 +100,7 @@ case class TxnEntry(conf: SysConfig) extends Bundle {
     lkReq.lkRelease := release
     lkReq.lkIdx := lkIdx
     lkReq.txnAbt := False
+    lkReq.txnTimeOut := False
     lkReq
   }
 }
@@ -136,13 +138,15 @@ case class LkResp(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
   // TODO: how to reuse the above W/O bundle hierarchy
 
   val respType = LockRespType()
+  val lkWaited = Bool() // if the lkResp is from dequeue, lkWaited = true
 
-  def toLkRlseReq(txnAbt: Bool, lkIdx: UInt): LkReq = {
+  def toLkRlseReq(txnAbt: Bool, lkIdx: UInt, timeOut: Bool): LkReq = {
     val lkReq = LkReq(this.conf, false) // process in txnMan, so false
     lkReq.assignSomeByName(this)
     lkReq.lkRelease.allowOverride := True
     lkReq.lkIdx.allowOverride := lkIdx
     lkReq.txnAbt.allowOverride := txnAbt
+    lkReq.txnTimeOut.allowOverride := timeOut
     lkReq
   }
 

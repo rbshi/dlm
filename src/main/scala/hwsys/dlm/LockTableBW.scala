@@ -63,8 +63,10 @@ class LockTableBW(conf: SysConfig) extends Component {
     htNewRamEntry.assignSomeByName( isActive(HTINSRESP) ?  htRamEntry | rHtRamEntry)
 
     val rLkResp = Reg(LockRespType())
+    val rLkWaited = Reg(Bool())
     io.lkResp.payload.assignSomeByName(rLkReq)
     io.lkResp.respType := rLkResp
+    io.lkResp.lkWaited := rLkWaited
     io.lkResp.valid := isActive(LKRESP) || isActive(LKRESPPOP)
 
     val tryLkEntry = LockEntryBW(conf)
@@ -91,64 +93,66 @@ class LockTableBW(conf: SysConfig) extends Component {
 
       // htNewRamEntry.assignSomeByName(htRamEntry)
       htNewRamEntry.ownerCnt.allowOverride
-      htNewRamEntry.ownerCnt := rLkReq.lkRelease ? (htRamEntry.ownerCnt-1) | (htRamEntry.ownerCnt+1)
+      htNewRamEntry.ownerCnt := rLkReq.lkRelease ? (htRamEntry.ownerCnt - 1) | (htRamEntry.ownerCnt + 1)
       ht.io.update_data := htNewRamEntry.asBits.asUInt
 
-
       when(ht.io.ht_res_if.fire) {
-        // lkGet
-        when(~rLkReq.lkRelease) {
-          switch(ht.io.ht_res_if.rescode) {
-            // lock exist
-            is(HTRet.ins_exist) {
-              // conflict
-              when(htLkEntry.lkMode || (rLkReq.lkType === LkT.wr || rLkReq.lkType === LkT.raw)) {
-                // push waitQ -> update htRamEntry
-                goto(LLPUSHCMD)
-              } otherwise {
-                rLkResp := LockRespType.grant // not conflict
-                ht.io.update_en := True // write back to ht data ram
+        // default lkWaited
+        rLkWaited := False
+        switch(rLkReq.lkRelease) {
+          // lkGet
+          is(False) {
+            switch(ht.io.ht_res_if.rescode) {
+              // lock exist
+              is(HTRet.ins_exist) {
+                // conflict
+                when(htLkEntry.lkMode || (rLkReq.lkType === LkT.wr || rLkReq.lkType === LkT.raw)) {
+                  // push waitQ -> update htRamEntry
+                  goto(LLPUSHCMD)
+                } otherwise {
+                  rLkResp := LockRespType.grant // not conflict
+                  ht.io.update_en := True // write back to ht data ram
+                  goto(LKRESP)
+                }
+              }
+              // no space in ht
+              is(HTRet.ins_fail) {
+                rLkResp := LockRespType.abort
+                goto(LKRESP)
+              }
+              // insert_success
+              default {
+                rLkResp := LockRespType.grant
                 goto(LKRESP)
               }
             }
-            // no space in ht
-            is(HTRet.ins_fail) {
-              rLkResp := LockRespType.abort
-              goto(LKRESP)
-            }
-            // insert_success
-            default {
-              rLkResp := LockRespType.grant
-              goto(LKRESP)
+          }
+
+          // lkRlse
+          is(True) {
+            rLkResp := LockRespType.release
+            switch(rLkReq.txnTimeOut) {
+              // if timeOut, a LL traversal of LLDEL first, if del fail -> normal rlse
+              is(True) {
+                goto(LLDELCMD)
+              }
+              is(False) {
+                when(htLkEntry.ownerCnt === 1) {
+                  switch(htLkEntry.waitQPtrVld) {
+                    is(True)(goto(LKRESPPOP))
+                    is(False)(goto(HTDELCMD))
+                  }
+                } otherwise {
+                  ht.io.update_en := True // ownerCnt--
+                  goto(LKRESP)
+                }
+              }
             }
           }
         }
-
-        // normal release
-        when(rLkReq.lkRelease && ~rLkReq.txnTimeOut) {
-          rLkResp := LockRespType.release
-          // case1: cnt--; case2: cnt-- & write to htRamEntry
-          when(htRamEntry.ownerCnt===1){
-            // if there is lkReq in waitQ
-            when(htRamEntry.waitQPtrVld) {
-              goto(LKRESPPOP)
-            } otherwise {
-              goto(HTDELCMD) // del the lkEntry in ht
-            }
-          } otherwise {
-            ht.io.update_en := True
-            goto(LKRESP)
-          }
-        }
-
-        // timeout release
-        when(rLkReq.lkRelease && rLkReq.txnTimeOut) {
-          rLkResp := LockRespType.release
-          goto(LLDELCMD)
-        }
-
       }
     }
+
 
     HTDELCMD.whenIsActive{
       ht.io.setCmd(rLkReq.tId, 0, HTOp.del)
@@ -181,7 +185,6 @@ class LockTableBW(conf: SysConfig) extends Component {
           ht.io.update_en := ll.io.head_table_if.wr_en  // update htRamEntry
           rLkResp := LockRespType.waiting // lkResp wait if queue
           goto(LKRESP)
-          // goto(HTINSCMD) // no lkResp if queue
         } otherwise {
           // if ll.ins failed (not enough space)
           rLkResp := LockRespType.abort
@@ -200,12 +203,9 @@ class LockTableBW(conf: SysConfig) extends Component {
       val popLkReq = cloneOf(io.lkReq.payload)
       popLkReq.assignFromBits(ll.io.ll_res_if.key.asBits)
       // htNewRamEntry.assignSomeByName(rHtRamEntry)
-      htNewRamEntry.lkMode.allowOverride
-      htNewRamEntry.waitQPtrVld.allowOverride
-      htNewRamEntry.waitQPtr.allowOverride
-      htNewRamEntry.lkMode := popLkReq.lkType === LkT.wr || popLkReq.lkType === LkT.raw
-      htNewRamEntry.waitQPtrVld := ll.io.head_table_if.wr_data_ptr_val
-      htNewRamEntry.waitQPtr := ll.io.head_table_if.wr_data_ptr
+      htNewRamEntry.lkMode.allowOverride := popLkReq.lkType === LkT.wr || popLkReq.lkType === LkT.raw
+      htNewRamEntry.waitQPtrVld.allowOverride := ll.io.head_table_if.wr_data_ptr_val
+      htNewRamEntry.waitQPtr.allowOverride := ll.io.head_table_if.wr_data_ptr
 
       ht.io.update_data := htNewRamEntry.asBits.asUInt
       ht.io.update_addr := rHtRamAddr
@@ -216,6 +216,7 @@ class LockTableBW(conf: SysConfig) extends Component {
         ht.io.update_en := ll.io.head_table_if.wr_en  // update htRamEntry
         // lkResp
         rLkResp := LockRespType.grant
+        rLkWaited := True
         goto(LKRESP)
       }
     }
@@ -234,23 +235,30 @@ class LockTableBW(conf: SysConfig) extends Component {
     }
 
     LLDELRESP.whenIsActive {
-      // htNewRamEntry.assignSomeByName(rHtRamEntry)
-      htNewRamEntry.waitQPtrVld.allowOverride
-      htNewRamEntry.waitQPtr.allowOverride
-      htNewRamEntry.waitQPtrVld := ll.io.head_table_if.wr_data_ptr_val
-      htNewRamEntry.waitQPtr := ll.io.head_table_if.wr_data_ptr
       ht.io.update_data := htNewRamEntry.asBits.asUInt
       ht.io.update_addr := rHtRamAddr
 
       when(ll.io.ll_res_if.fire) {
-        // case: LLDEL success
-        // update htRamEntry
-        ht.io.update_en := ll.io.head_table_if.wr_en
-        // lkResp
-        rLkResp := LockRespType.release
-        goto(LKRESP)
-
-        // TODO: LLDEL fail (already poped to current lock)
+        // case: LLDEL success (update htRamEntry)
+        when(ll.io.ll_res_if.rescode === LLRet.del_success) {
+          htNewRamEntry.waitQPtrVld.allowOverride := ll.io.head_table_if.wr_data_ptr_val
+          htNewRamEntry.waitQPtr.allowOverride := ll.io.head_table_if.wr_data_ptr
+          ht.io.update_en := ll.io.head_table_if.wr_en
+          rLkResp := LockRespType.release
+          rLkWaited := True
+          goto(LKRESP)
+        } otherwise { // if LLDEL fail, lk has been dequeued, as normal lkRlse
+          htNewRamEntry.ownerCnt.allowOverride := rHtRamEntry.ownerCnt - 1
+          when(rHtRamEntry.ownerCnt === 1) {
+            switch(htLkEntry.waitQPtrVld) {
+              is(True)(goto(LKRESPPOP))
+              is(False)(goto(HTDELCMD))
+            }
+          } otherwise {
+            ht.io.update_en := True // ownerCnt--
+            goto(LKRESP)
+          }
+        }
       }
     }
 

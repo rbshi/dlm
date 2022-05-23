@@ -41,7 +41,7 @@ module linked_list_top(
   ll_head_table_if      ll_head_table_if_d(.clk (clk_i));
 
   assign ll_cmd_if.cmd.key = ll_cmd_if_key;
-  assign ll_cmd_if.cmd.opcode = ll_cmd_if_opcode;
+  assign ll_cmd_if.cmd.opcode = ll_ht_opcode_t'(ll_cmd_if_opcode);
   assign ll_cmd_if.head_ptr = ll_cmd_if_head_ptr;
   assign ll_cmd_if.head_ptr_val = ll_cmd_if_head_ptr_val;
 

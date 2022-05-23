@@ -60,6 +60,7 @@ class LockTableNW(conf: SysConfig) extends Component {
 
     io.lkResp.payload.assignSomeByName(rLkReq)
     io.lkResp.respType := rLkResp
+    io.lkResp.lkWaited := False
     io.lkResp.valid := isActive(LK_RESP)
 
     INSERT_TRY.whenIsActive{

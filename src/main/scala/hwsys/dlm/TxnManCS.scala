@@ -33,7 +33,9 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
 
   // context registers
   // NOTE: separate local / remote; some reg is redundant (may be simplified)
-  val cntLkReqLoc, cntLkReqRmt, cntLkRespLoc, cntLkRespRmt, cntLkHoldLoc, cntLkHoldRmt, cntLkReqWrLoc, cntLkReqWrRmt, cntLkHoldWrLoc, cntLkHoldWrRmt, cntCmtReqLoc, cntCmtReqRmt, cntCmtRespLoc, cntCmtRespRmt, cntRlseReqLoc, cntRlseReqRmt, cntRlseReqWrLoc, cntRlseReqWrRmt, cntRlseRespLoc, cntRlseRespRmt = Vec(Reg(UInt(conf.wMaxTxnLen bits)).init(0), conf.nTxnCS)
+  val cntLkReqLoc, cntLkReqRmt, cntLkRespLoc, cntLkRespRmt, cntLkHoldLoc, cntLkHoldRmt, cntLkWaitLoc, cntLkWaitRmt, cntLkReqWrLoc, cntLkReqWrRmt, cntLkHoldWrLoc, cntLkHoldWrRmt, cntCmtReqLoc, cntCmtReqRmt, cntCmtRespLoc, cntCmtRespRmt, cntRlseReqLoc, cntRlseReqRmt, cntRlseReqWrLoc, cntRlseReqWrRmt, cntRlseRespLoc, cntRlseRespRmt = Vec(Reg(UInt(conf.wMaxTxnLen bits)).init(0), conf.nTxnCS)
+  val cntTimeOut = Vec(Reg(UInt(conf.wTimeOut bits)).init(0), conf.nTxnCS)
+  val rTimeOut = Vec(RegInit(False), conf.nTxnCS)
   // status register
   val rAbort = Vec(RegInit(False), conf.nTxnCS)
   val rReqDone, rRlseDone = Vec(RegInit(True), conf.nTxnCS) // init to True, to trigger the first txnMem load and issue
@@ -145,60 +147,67 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
     val rCurTxnId = RegNextWhen(curTxnId, io.lkRespLoc.fire)
     val getAllRlse = (cntRlseRespLoc(rCurTxnId) === cntLkHoldLoc(rCurTxnId)) && (cntRlseRespRmt(rCurTxnId) === cntLkHoldRmt(rCurTxnId))
     val getAllLkResp = (cntLkReqLoc(rCurTxnId) === cntLkRespLoc(rCurTxnId)) && (cntLkReqRmt(rCurTxnId) === cntLkRespRmt(rCurTxnId))
+    val getAllRlseTimeOut = (cntRlseRespLoc(curTxnId) === (cntLkHoldLoc(curTxnId) +  cntLkWaitLoc(curTxnId))) && (cntRlseRespRmt(curTxnId) === (cntLkHoldRmt(curTxnId) +  cntLkWaitRmt(curTxnId)))
 
     // Since rReqDone will have two cycles latency (io.lkResp (c0) -> R -> rAbort (c1) -> R -> rReqDone (c2)), the following logic occurs in c1, so use ~(xxx) as extra statements to avoid lkReq happens in c2.
     val firstReqAbt = rAbort(rCurTxnId) && ~(io.lkReqLoc.fire && io.lkReqLoc.txnId === rCurTxnId) && ~(io.lkReqRmt.fire && io.lkReqRmt.txnId === rCurTxnId)
 
     val rFire = RegNext(io.lkRespLoc.fire, False)
-
     // FIXME: may conflict with LkRespRmt
     // release after get all lkResp and rReqDone
-    when(rFire && getAllRlse && getAllLkResp && (rReqDone(rCurTxnId) || firstReqAbt)) {
+    when(rFire && ((getAllRlse && getAllLkResp) || (rTimeOut(rCurTxnId) && getAllRlseTimeOut)) && (rReqDone(rCurTxnId) || firstReqAbt)) {
       rRlseDone(rCurTxnId).set()
       when(rAbort(rCurTxnId))(io.cntTxnAbt := io.cntTxnAbt + 1) otherwise (io.cntTxnCmt := io.cntTxnCmt + 1)
     }
-
 
     io.lkRespLoc.ready := isActive(WAIT_RESP)
 
     WAIT_RESP.whenIsActive {
       when(io.lkRespLoc.fire) {
         // lock req
-        when(io.lkRespLoc.respType === LockRespType.grant) {
-          // note: ooo arrive
-          // should use lkHold as wr address
-          lkMemLoc.write(txnOffs + cntLkHoldLoc(curTxnId), io.lkRespLoc.payload)
-
-          // NOTE:
-          cntLkRespLoc(curTxnId) := cntLkRespLoc(curTxnId) + 1
-          // do not release lk for insTab
-          when(io.lkRespLoc.lkType =/= LkT.insTab){
-            cntLkHoldLoc(curTxnId) := cntLkHoldLoc(curTxnId) + 1
-          }
-
-          switch(io.lkRespLoc.lkType) {
-            is(LkT.rd) (goto(LOCAL_RD_REQ))
-            is(LkT.wr) (cntLkHoldWrLoc(curTxnId) := cntLkHoldWrLoc(curTxnId) + 1)
-            is(LkT.raw) {
-              cntLkHoldWrLoc(curTxnId) := cntLkHoldWrLoc(curTxnId) + 1
-              goto(LOCAL_RD_REQ) // issue local rd req once get the lock
+        switch(io.lkRespLoc.respType) {
+          is(LockRespType.grant) {
+            // note: ooo arrive, use cnfLkHold as address
+            cntLkRespLoc(curTxnId) := cntLkRespLoc(curTxnId) + 1
+            // do not release lk for insTab
+            when(io.lkRespLoc.lkType =/= LkT.insTab){
+              cntLkHoldLoc(curTxnId) := cntLkHoldLoc(curTxnId) + 1
             }
-            is(LkT.insTab) ()
+
+            switch(io.lkRespLoc.lkType) {
+              is(LkT.rd) (goto(LOCAL_RD_REQ))
+              is(LkT.wr) (cntLkHoldWrLoc(curTxnId) := cntLkHoldWrLoc(curTxnId) + 1)
+              is(LkT.raw) {
+                cntLkHoldWrLoc(curTxnId) := cntLkHoldWrLoc(curTxnId) + 1
+                goto(LOCAL_RD_REQ) // issue local rd req once get the lock
+              }
+              is(LkT.insTab) ()
+            }
+          }
+
+          is(LockRespType.waiting) {
+            cntLkWaitLoc(curTxnId) := cntLkWaitLoc(curTxnId) + 1
+          }
+
+          is(LockRespType.abort) {
+            // FIXME: rAbort set conflict
+            rAbort(curTxnId) := True
+            cntLkRespLoc(curTxnId) := cntLkRespLoc(curTxnId) + 1
+          }
+
+          is(LockRespType.release) {
+            cntRlseRespLoc(curTxnId) := cntRlseRespLoc(curTxnId) + 1
+            //          when(cntRlseRespLoc(curTxnId) === cntLkHoldLoc(curTxnId) - 1){
+            //            rRlseDone(curTxnId) := True
+            //          }
           }
         }
 
-        when(io.lkRespLoc.respType === LockRespType.abort) {
-          // FIXME: rAbort set conflict
-          rAbort(curTxnId) := True
-          cntLkRespLoc(curTxnId) := cntLkRespLoc(curTxnId) + 1
+        // If waited flag is true, no need to write to lkMem, since happened in lkResp.waiting
+        when((io.lkRespLoc.respType===LockRespType.grant && ~io.lkRespLoc.lkWaited) ||  io.lkRespLoc.respType===LockRespType.waiting) {
+          lkMemLoc.write(txnOffs + cntLkHoldLoc(curTxnId) + cntLkWaitLoc(curTxnId), io.lkRespLoc.payload)
         }
 
-        when(io.lkRespLoc.respType === LockRespType.release) {
-          cntRlseRespLoc(curTxnId) := cntRlseRespLoc(curTxnId) + 1
-          //          when(cntRlseRespLoc(curTxnId) === cntLkHoldLoc(curTxnId) - 1){
-          //            rRlseDone(curTxnId) := True
-          //          }
-        }
       }
     }
 
@@ -231,6 +240,7 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
     val rCurTxnId = RegNextWhen(curTxnId, io.lkRespRmt.fire)
     val getAllRlse = (cntRlseRespLoc(rCurTxnId) === cntLkHoldLoc(rCurTxnId)) && (cntRlseRespRmt(rCurTxnId) === cntLkHoldRmt(rCurTxnId))
     val getAllLkResp = (cntLkReqLoc(rCurTxnId) === cntLkRespLoc(rCurTxnId)) && (cntLkReqRmt(rCurTxnId) === cntLkRespRmt(rCurTxnId))
+    val getAllRlseTimeOut = (cntRlseRespLoc(curTxnId) === (cntLkHoldLoc(curTxnId) +  cntLkWaitLoc(curTxnId))) && (cntRlseRespRmt(curTxnId) === (cntLkHoldRmt(curTxnId) +  cntLkWaitRmt(curTxnId)))
 
     // io.lkResp -> R -> rAbort -> R -> rReqDone
     val firstReqAbt = rAbort(rCurTxnId) && ~(io.lkReqLoc.fire && io.lkReqLoc.txnId === rCurTxnId) && ~(io.lkReqRmt.fire && io.lkReqRmt.txnId === rCurTxnId)
@@ -238,47 +248,53 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
     val rFire = RegNext(io.lkRespRmt.fire, False)
 
     // release after get all lkResp and rReqDone
-    when(rFire && getAllRlse && getAllLkResp && (rReqDone(rCurTxnId) || firstReqAbt)) {
+    when(rFire && ((getAllRlse && getAllLkResp) || (rTimeOut(rCurTxnId) && getAllRlseTimeOut)) && (rReqDone(rCurTxnId) || firstReqAbt)) {
       rRlseDone(rCurTxnId).set()
       when(rAbort(rCurTxnId))(io.cntTxnAbt := io.cntTxnAbt + 1) otherwise (io.cntTxnCmt := io.cntTxnCmt + 1)
     }
 
-
     io.lkRespRmt.ready := isActive(WAIT_RESP)
     WAIT_RESP.whenIsActive {
-
       when(io.lkRespRmt.fire) {
+        switch(io.lkRespRmt.respType) {
+          is(LockRespType.grant) {
+            // note: ooo arrive
+            cntLkRespRmt(curTxnId) := cntLkRespRmt(curTxnId) + 1
 
-        when(io.lkRespRmt.respType === LockRespType.grant) {
-          // note: ooo arrive
-          lkMemRmt.write(txnOffs + cntLkHoldRmt(curTxnId), io.lkRespRmt.payload)
-
-          cntLkRespRmt(curTxnId) := cntLkRespRmt(curTxnId) + 1
-
-          when(io.lkRespRmt.lkType =/= LkT.insTab){
-            cntLkHoldRmt(curTxnId) := cntLkHoldRmt(curTxnId) + 1
-          }
-
-          switch(io.lkRespRmt.lkType) {
-            is(LkT.rd) (goto(RMT_RD_CONSUME))
-            is(LkT.wr) (cntLkHoldWrRmt(curTxnId) := cntLkHoldWrRmt(curTxnId) + 1)
-            is(LkT.raw) {
-              cntLkHoldWrRmt(curTxnId) := cntLkHoldWrRmt(curTxnId) + 1
-              goto(RMT_RD_CONSUME) // issue local rd req once get the lock
+            when(io.lkRespRmt.lkType =/= LkT.insTab){
+              cntLkHoldRmt(curTxnId) := cntLkHoldRmt(curTxnId) + 1
             }
-            is(LkT.insTab) ()
+
+            switch(io.lkRespRmt.lkType) {
+              is(LkT.rd) (goto(RMT_RD_CONSUME))
+              is(LkT.wr) (cntLkHoldWrRmt(curTxnId) := cntLkHoldWrRmt(curTxnId) + 1)
+              is(LkT.raw) {
+                cntLkHoldWrRmt(curTxnId) := cntLkHoldWrRmt(curTxnId) + 1
+                goto(RMT_RD_CONSUME) // issue local rd req once get the lock
+              }
+              is(LkT.insTab) ()
+            }
+          }
+
+          is(LockRespType.waiting) {
+            cntLkWaitRmt(curTxnId) := cntLkWaitRmt(curTxnId) + 1
+          }
+
+          is(LockRespType.abort) {
+            // FIXME: rAbort set conflict
+            rAbort(curTxnId) := True
+            cntLkRespRmt(curTxnId) := cntLkRespRmt(curTxnId) + 1
+          }
+
+          is(LockRespType.release) {
+            cntRlseRespRmt(curTxnId) := cntRlseRespRmt(curTxnId) + 1
           }
         }
 
-        when(io.lkRespRmt.respType === LockRespType.abort) {
-          // FIXME: rAbort set conflict
-          rAbort(curTxnId) := True
-          cntLkRespRmt(curTxnId) := cntLkRespRmt(curTxnId) + 1
+        when((io.lkRespRmt.respType===LockRespType.grant && ~io.lkRespRmt.lkWaited) ||  io.lkRespRmt.respType===LockRespType.waiting) {
+          lkMemRmt.write(txnOffs + cntLkHoldRmt(curTxnId) + cntLkWaitRmt(curTxnId), io.lkRespRmt.payload)
         }
 
-        when(io.lkRespRmt.respType === LockRespType.release) {
-          cntRlseRespRmt(curTxnId) := cntRlseRespRmt(curTxnId) + 1
-        }
       }
     }
 
@@ -364,7 +380,6 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
       }
     }
 
-
     io.axi.w.data.setAll()
     io.axi.w.last := (nBeat === (U(1) << rCmtTxn.wLen) - 1)
     io.axi.w.valid := isActive(LOCAL_W)
@@ -402,20 +417,26 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
     CS_TXN.whenIsActive {
 
       /**
+       * Normal case
        * 1. get all lk resp
        * 2. rAbort || rReqDone
        * 3. (rAbort || WrLoc <= CmtRespLoc )
        * 4. send #RlseReq loc === #LkHold local
+       * Timeout case
+       * 1. rTimeOut
+       * 2. cntRlseReqLoc < (cntLkHoldLoc +  cntLkWaitLoc)
        * */
-      val rlseCret = getAllLkResp && (rAbort(curTxnId) || rReqDone(curTxnId)) && (rAbort(curTxnId) || cntRlseReqWrLoc(curTxnId) <= cntCmtRespLoc(curTxnId)) && cntRlseReqLoc(curTxnId) < cntLkHoldLoc(curTxnId)
-      when(rlseCret) {
+      val rlseCretNormal = getAllLkResp && (rAbort(curTxnId) || rReqDone(curTxnId)) && (rAbort(curTxnId) || cntRlseReqWrLoc(curTxnId) < cntCmtRespLoc(curTxnId) || cntRlseReqWrLoc(curTxnId)===0) && cntRlseReqLoc(curTxnId) < cntLkHoldLoc(curTxnId) // FIXME: origin: cntRlseReqWrLoc(curTxnId) <= cntCmtRespLoc(curTxnId)
+      val rlseCretTimeOut = rTimeOut(curTxnId) && (cntRlseReqLoc(curTxnId) < (cntLkHoldLoc(curTxnId) +  cntLkWaitLoc(curTxnId)))
+      when(rlseCretNormal || rlseCretTimeOut) {
         goto(LK_RLSE)
       } otherwise {
         curTxnId := curTxnId + 1
       }
     }
 
-    lkReqRlseLoc.payload := lkItem.toLkRlseReq(rAbort(curTxnId), cntRlseReqLoc(curTxnId))
+    //lkReqRlseLoc.payload := lkItem.toLkRlseReq(rAbort(curTxnId), cntRlseReqLoc(curTxnId)) //FIXME: why change lkIdx?
+    lkReqRlseLoc.payload := lkItem.toLkRlseReq(rAbort(curTxnId), lkItem.lkIdx, rTimeOut(curTxnId))
 
     LK_RLSE.whenIsActive {
       lkReqRlseLoc.valid := True
@@ -446,21 +467,24 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
     CS_TXN.whenIsActive {
 
       /**
+       * Normal case
        * 1. get all lk resp
        * 2. rAbort || rReqDone
        * 3. send #RlseReq loc === #LkHold local
+       * TimeOut case
        * */
 
-      val rlseCret = getAllLkResp && (rAbort(curTxnId) || rReqDone(curTxnId)) && cntRlseReqRmt(curTxnId) < cntLkHoldRmt(curTxnId)
+      val rlseCretNormal = getAllLkResp && (rAbort(curTxnId) || rReqDone(curTxnId)) && cntRlseReqRmt(curTxnId) < cntLkHoldRmt(curTxnId)
+      val rlseCretTimeOut = rTimeOut(curTxnId) && cntRlseReqRmt(curTxnId) < (cntLkHoldRmt(curTxnId) +  cntLkWaitRmt(curTxnId))
 
-      when(rlseCret) {
+      when(rlseCretNormal || rlseCretTimeOut) {
         goto(RMT_LK_RLSE)
       } otherwise {
         curTxnId := curTxnId + 1
       }
     }
 
-    lkReqRlseRmt.payload := lkItem.toLkRlseReq(rAbort(curTxnId), cntRlseReqRmt(curTxnId))
+    lkReqRlseRmt.payload := lkItem.toLkRlseReq(rAbort(curTxnId), lkItem.lkIdx, rTimeOut(curTxnId))
 
     RMT_LK_RLSE.whenIsActive {
       lkReqRlseRmt.valid := True
@@ -495,8 +519,41 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
 
   }
 
+
+
   /**
-   * component6: loadTxnMem
+   * component6: timer
+   *
+   * */
+  val compTimeOut = new StateMachine {
+    val IDLE = new State with EntryPoint
+    val COUNT = new State
+
+    IDLE.whenIsActive {
+      when(io.start) {
+        cntTimeOut.foreach(_.clearAll())
+        rTimeOut.foreach(_.clear())
+        goto(COUNT)
+      }
+    }
+
+    COUNT.whenIsActive {
+      // start counter if reqDone
+      (rReqDone, cntTimeOut).zipped.foreach((a,b) => {
+        when(a) (b := b + 1)
+      })
+      (cntTimeOut, rTimeOut, rAbort).zipped.foreach((a,b,c) => {
+        when(a.andR) {
+          b.set()
+          c.set()
+        }
+      })
+      when(io.done)(goto(IDLE))
+    }
+  }
+
+  /**
+   * component7: loadTxnMem
    *
    * */
 
@@ -570,10 +627,11 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
       when(cntTxnWordInLine.willOverflow)(rTxnMemLd.clear())
       when(cntTxnWord.willOverflow) {
         // clear all cnt register
-        val zero = UInt(conf.wMaxTxnLen bits).default(0)
-        for (e <- Seq(cntLkReqLoc, cntLkReqRmt, cntLkRespLoc, cntLkRespRmt, cntLkHoldLoc, cntLkHoldRmt, cntLkReqWrLoc, cntLkReqWrRmt, cntLkHoldWrLoc, cntLkHoldWrRmt, cntCmtReqLoc, cntCmtReqRmt, cntCmtRespLoc, cntCmtRespRmt, cntRlseReqLoc, cntRlseReqRmt, cntRlseReqWrLoc, cntRlseReqWrRmt, cntRlseRespLoc, cntRlseRespRmt))
-          e(curTxnId) := zero // why the clearAll() DOES NOT work?
-        for (e <- Seq(rReqDone, rAbort, rRlseDone))
+        for (e <- Seq(cntLkReqLoc, cntLkReqRmt, cntLkRespLoc, cntLkRespRmt, cntLkHoldLoc, cntLkHoldRmt, cntLkWaitLoc, cntLkWaitRmt, cntLkReqWrLoc, cntLkReqWrRmt, cntLkHoldWrLoc, cntLkHoldWrRmt, cntCmtReqLoc, cntCmtReqRmt, cntCmtRespLoc, cntCmtRespRmt, cntRlseReqLoc, cntRlseReqRmt, cntRlseReqWrLoc, cntRlseReqWrRmt, cntRlseRespLoc, cntRlseRespRmt))
+          e(curTxnId) := U(0, conf.wMaxTxnLen bits) // why the clearAll() DOES NOT work?
+        cntTimeOut(curTxnId) := U(0, conf.wTimeOut bits)
+
+        for (e <- Seq(rReqDone, rAbort, rRlseDone, rTimeOut))
           e(curTxnId).clear()
 
         io.cntTxnLd := io.cntTxnLd + 1

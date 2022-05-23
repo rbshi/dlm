@@ -6,7 +6,18 @@ import hwsys.util._
 
 class LtCh(sysConf: SysConfig) extends Component{
   val io = LockTableIO(sysConf)
-  val ltAry = Array.fill(sysConf.nLtPart)(new LockTableNW(sysConf))
+  val ltAry = Array.fill(sysConf.nLtPart)(new LockTableBW(sysConf))
+
+  //  val ltAry = if(sysConf.ccProt=="NW") {
+//    Array.fill(sysConf.nLtPart)(new LockTableNW(sysConf))
+//  } else {
+//    Array.fill(sysConf.nLtPart)(new LockTableBW(sysConf))
+//  }
+
+//  sysConf.ccProt match {
+//    case "NW" => Array.fill(sysConf.nLtPart)(new LockTableNW(sysConf))
+//    case "BW" => Array.fill(sysConf.nLtPart)(new LockTableBW(sysConf))
+//  }
 
   // each channel has multiple tables, tuplue pointer is used for insert tab
   val tupPtr = Vec(Reg(UInt(sysConf.wTId bits)).init(0), sysConf.nTab)
@@ -21,6 +32,8 @@ class LtCh(sysConf: SysConfig) extends Component{
   lkRespInsTab.translateFrom(lkReqInsTab)((a, b) => {
     a.assignSomeByName(b)
     a.respType := LockRespType.grant
+    a.lkWaited := False
+
     a.tId.allowOverride
     a.tId := tupPtr(b.tabId) //
   })
