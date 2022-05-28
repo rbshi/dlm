@@ -3,16 +3,16 @@
 
 ```
 .
-├── src/main/             # Source files
-│   ├── lib/              # External lib
+├── src/main/             # source files
+│   ├── lib/              # external lib
 │   │   ├── HashTable.    # 
 │   │   └── LinkedList.   # 
 │   └── scala/            # design with SpinalHDL
 │       └── hwsys/        # hwsys lib
-│           ├── coyote    # interface and data type to coyote
+│           ├── coyote    # interface and datatype to coyote
 │           ├── dlm/      # distributed lock manager
 │           │   └── test  # testbench of dlm
-│           ├── sim       # heler function for testbench
+│           ├── sim       # helper function for testbench
 │           └── util      # hardware utilities
 ├── build.sbt             # sbt project
 └── build.sc              # mill project
