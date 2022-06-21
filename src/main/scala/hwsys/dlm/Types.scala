@@ -171,7 +171,7 @@ class LockTableIO(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle{
 case class RdmaCtrlIO() extends Bundle {
   val en = in Bool()
   val len = in UInt(32 bits)
-  val qpn = in UInt(24 bits)
+  val qpn = in UInt(10 bits)
   val flowId = in UInt(4 bits)
 }
 

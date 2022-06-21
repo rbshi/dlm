@@ -30,8 +30,6 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
 
   }
 
-  io.rdma.rq.setBlocked()
-
   // default
   io.rdma.axis_src.tlast.clear()
   io.rdma.axis_src.tkeep.setAll()
@@ -65,10 +63,10 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
   val sq = RdmaReqT()
   sq.opcode := 1 // write
   sq.qpn := io.ctrl.qpn
-  sq.id := 0
   sq.host := False
   sq.mode := False
-  sq.pkg.assignFromBits(rdma_base.asBits)
+  sq.last := True
+  sq.msg.assignFromBits(rdma_base.asBits)
   sq.rsrvd := 0
   io.rdma.sq.data.assignFromBits(sq.asBits)
 

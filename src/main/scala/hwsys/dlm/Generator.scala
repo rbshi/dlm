@@ -65,7 +65,7 @@ object SysCoyote1T2N1C8PGen {
     MySpinalConfig.generateVerilog{
       val top = new WrapSys()
       top.renameIO()
-      top.setDefinitionName("design_user_wrapper_1t2n1c8p")
+      top.setDefinitionName("dlm_1t2n1c8p")
       top
     }
   }
@@ -78,7 +78,7 @@ object SysCoyote1T2N4C8PGen {
     MySpinalConfig.generateVerilog{
       val top = new WrapSys()
       top.renameIO()
-      top.setDefinitionName("design_user_wrapper_1t2n4c8p")
+      top.setDefinitionName("dlm_1t2n4c8p")
       top
     }
   }
@@ -91,7 +91,7 @@ object SysCoyote2T2N8C8PGen {
     MySpinalConfig.generateVerilog{
       val top = new WrapSys()
       top.renameIO()
-      top.setDefinitionName("design_user_wrapper_2t2n8c8p")
+      top.setDefinitionName("dlm_2t2n8c8p")
       top
     }
   }
@@ -103,7 +103,7 @@ object SysCoyote1T2N8C8PGen {
     MySpinalConfig.generateVerilog{
       val top = new WrapSys()
       top.renameIO()
-      top.setDefinitionName("design_user_wrapper_1t2n8c8p")
+      top.setDefinitionName("dlm_1t2n8c8p")
       top
     }
   }
@@ -117,7 +117,7 @@ object SysCoyoteTcpOneTh {
     MySpinalConfig.generateVerilog{
       val top = new TcpOneTh()
       top.renameIO()
-      top.setDefinitionName("design_user_wrapper_tcponeth")
+      top.setDefinitionName("dlm_tcponeth")
       top
     }
   }

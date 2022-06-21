@@ -9,7 +9,7 @@ import hwsys.util.Helpers._
 
 // both BpssReq & RDMAReq
 case class ReqT() extends Bundle {
-  val rsrvd = UInt(96-48-28-4-4-6-1 bits) // total len = 96b
+  val rsrvd = UInt(96-48-28-4-4-6-1 bits) // 5b
   val vfid = UInt(1 bits) // only 1 vFPGA
   val pid = UInt(6 bits)
   val dest = UInt(4 bits)
@@ -40,15 +40,26 @@ case class Axi4StreamData(width: Int) extends Bundle {
   val tlast = Bool()
 }
 
-// cast RdmaReqT.pkg -> RdmaBaseT
+// cast RdmaReqT.msg -> RdmaBaseT
 // rdma parser bit definition assumes LSB first in sv struct
 case class RdmaBaseT() extends Bundle {
-  val lvaddr = UInt(48 bits)
-  val rvaddr = UInt(48 bits)
+  val lvaddr = UInt(64 bits)
+  val rvaddr = UInt(64 bits)
   val len = UInt( 32 bits)
-  val params = UInt(64 bits)
+  val params = UInt(512-64-64-32 bits) // 352b
 }
 
+case class RdmaReqT() extends Bundle {
+  val rsrvd = UInt(544-512-3-10-5 bits) // 14b
+  val msg = UInt(512 bits) // RdmaBaseT or RPC
+  val last = Bool()
+  val mode = Bool()
+  val host = Bool()
+  val qpn = UInt(10 bits)
+  val opcode = UInt(5 bits)
+}
+
+/* old rdma req interface
 case class RdmaReqT() extends Bundle {
   val rsrvd = UInt(256-5-24-1-1-1-192 bits) // 32b
   val pkg = UInt(192 bits) // RdmaBaseT or RPC
@@ -57,15 +68,14 @@ case class RdmaReqT() extends Bundle {
   val id = UInt(1 bits)
   val qpn = UInt(24 bits)
   val opcode = UInt(5 bits)
-}
+} */
 
 
 class RdmaIO extends Bundle {
   // rd/wr cmd
   val rd_req = slave Stream StreamData(96)
   val wr_req = slave Stream StreamData(96)
-  val rq = slave Stream StreamData(256)
-  val sq = master Stream StreamData(256)
+  val sq = master Stream StreamData(544)
 
   val axis_sink = slave Stream Axi4StreamData(512)
   val axis_src =  master Stream Axi4StreamData(512)
@@ -73,7 +83,6 @@ class RdmaIO extends Bundle {
   def flipDir(): Unit = {
     rd_req.flipDir()
     wr_req.flipDir()
-    rq.flipDir()
     sq.flipDir()
     axis_sink.flipDir()
     axis_src.flipDir()
@@ -82,7 +91,6 @@ class RdmaIO extends Bundle {
   def tieOff(): Unit = {
     rd_req.setBlocked()
     wr_req.setBlocked()
-    rq.setBlocked()
     sq.setIdle()
     axis_sink.setBlocked()
     axis_src.setIdle()

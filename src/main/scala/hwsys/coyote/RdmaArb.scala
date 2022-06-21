@@ -16,11 +16,8 @@ class RdmaArb(cnt: Int) extends Component {
   // rdmaV is a slave hub
   io.rdmaV.foreach(_.flipDir())
 
-  // block the rq
-  io.rdmaio.rq.setBlocked()
-
   // pipe the sq
-  val sqV = Vec(Stream(StreamData(256)), cnt)
+  val sqV = Vec(Stream(StreamData(544)), cnt)
   (sqV, io.rdmaV).zipped.foreach(_ <-/< _.sq)
 
   // mstr interface arb

@@ -84,7 +84,7 @@ object TwoNodeSim {
     }.doSim("twonode_direct_conn", 99) { dut =>
       // params
       val txnLen = 32
-      val txnCnt = 128
+      val txnCnt = 64
       val txnMaxLen = sysConf.maxTxnLen-1
 
       dut.clockDomain.forkStimulus(period = 10)

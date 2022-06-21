@@ -19,7 +19,7 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
     // input
     val en = in Bool()
     val len = in UInt(32 bits)
-    val qpn = in UInt(24 bits)
+    val qpn = in UInt(10 bits)
     val nOnFly = in UInt(32 bits)
     val flowId = in UInt(4 bits)
 
@@ -28,8 +28,6 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
     val cntRecv = out(Reg(UInt(32 bits))).init(0)
 
   }
-
-  io.rdma_1.rq.setBlocked()
 
   val rdma_base = RdmaBaseT()
   rdma_base.lvaddr := 0
@@ -40,10 +38,9 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
   val sq = RdmaReqT()
   sq.opcode := 1 // write
   sq.qpn := io.qpn
-  sq.id := 0
   sq.host := False
   sq.mode := False
-  sq.pkg.assignFromBits(rdma_base.asBits)
+  sq.msg.assignFromBits(rdma_base.asBits)
   sq.rsrvd := 0
   io.rdma_1.sq.data.assignFromBits(sq.asBits)
 

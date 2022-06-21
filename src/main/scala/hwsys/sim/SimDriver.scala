@@ -230,7 +230,6 @@ object SimDriver {
 
   /** RDMA switch for sim
    * Support WR verb only now
-   * rq is not used
    */
   def rdmaSwitch(cd: ClockDomain, n: Int, lat: Int, sq: Seq[Stream[StreamData]],
                                rdReq: Seq[Stream[StreamData]], wrReq: Seq[Stream[StreamData]],
@@ -268,8 +267,8 @@ object SimDriver {
           // reqB.len #= sqPkg.len.toBigInt
           // val reqVal = reqB.toBigInt()
 
-          // FIXME: manually set the req.pkg.raddr (127:80) req.pkg.len (160:128) to reqT (vaddr@95:48, len@47:20)
-          val reqVal = (bigIntTruncVal(sqD, 80, 127) << 48) + (bigIntTruncVal(sqD, 128, 159) << 20)
+          // FIXME: manually set the req.pkg.raddr (142:78) req.pkg.len (174:142) to reqT (vaddr@95:48, len@47:20)
+          val reqVal = (bigIntTruncVal(sqD, 78, 142) << 48) + (bigIntTruncVal(sqD, 142, 174) << 20)
 
           // enq local: rdReq, axiSrcCmd. Rmt: wrReq, axiSinkCmd
           for (enQ <- Seq(rdReqQ(idx), wrReqQ(getRmt(idx)), axiSrcCmdQ(idx), axiSinkCmdQ(getRmt(idx)))) {
