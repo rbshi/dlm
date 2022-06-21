@@ -29,6 +29,9 @@ object SimConversions {
       (req.tabId << (sysConf.wNId+sysConf.wCId+sysConf.wTId)) +
       (req.lkType << (sysConf.wNId+sysConf.wCId+sysConf.wTId+sysConf.wTabId)) +
       (req.wLen << (sysConf.wNId+sysConf.wCId+sysConf.wTId+sysConf.wTabId+sysConf.wLkType))
+
+//    println(s"txnBigInt=${vBigInt.toHexString}")
+
     MemStructSim.bigIntToBytes(vBigInt, 8)
   }
 
