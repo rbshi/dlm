@@ -41,6 +41,7 @@ bin/
 !tester/src/test/resources/*.vhd
 
 
+generated_rtl/
 simWorkspace/
 tmp/
 null

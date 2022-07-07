@@ -39,7 +39,7 @@ object WrapNodeNetSim {
 
       // params
       val txnLen = 16
-      val txnCnt = 256
+      val txnCnt = 128
       val txnMaxLen = sysConf.maxTxnLen - 1
 
       for (idx <- 0 until 2) {

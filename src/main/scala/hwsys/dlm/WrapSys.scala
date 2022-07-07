@@ -19,7 +19,7 @@ class WrapSys(implicit sysConf: SysConfig) extends Component with RenameIO {
     // memory ports 0: host; others: user logic (may change)
     val axi_mem = Vec(master(Axi4(sysConf.axiConf)), 16)
     // rdma
-    val rdma_1 = new RdmaIO
+    val rdma_0 = new RdmaIO
   }
 
   // rd/wr data between host and hbm
@@ -37,7 +37,7 @@ class WrapSys(implicit sysConf: SysConfig) extends Component with RenameIO {
   // axi of cmd of txnMan
   txnEng.io.node.cmdAxi.zipWithIndex.foreach{case (p, i) => p <> io.axi_mem(1+sysConf.nTxnMan+sysConf.nTxnAgent+i)}
   // rdma
-  txnEng.io.rdma.connectSomeByName(io.rdma_1)
+  txnEng.io.rdma.connectSomeByName(io.rdma_0)
 
   // ctrl reg mapping
   val ctrlR = new AxiLite4SlaveFactory(io.axi_ctrl, useWriteStrobes = true)

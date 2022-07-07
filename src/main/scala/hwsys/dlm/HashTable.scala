@@ -94,7 +94,7 @@ class HashTableIO(keyWidth:Int, valWidth:Int, bucketWidth:Int, tableAddrWidth:In
 }
 
 // parameters of blockbox is in sv package FIXME: MUST be modified manually
-class hash_table_top(keyWidth:Int, valWidth:Int, bucketWidth:Int, tableAddrWidth:Int) extends BlackBox with RenameIO {
+class hash_table_top(keyWidth:Int, valWidth:Int, bucketWidth:Int, tableAddrWidth:Int, pkgSurfix:String) extends BlackBox with RenameIO {
 
   val io = new HashTableIO(keyWidth, valWidth, bucketWidth, tableAddrWidth)
   mapCurrentClockDomain(io.clk_i, io.rst_i)
@@ -104,7 +104,7 @@ class hash_table_top(keyWidth:Int, valWidth:Int, bucketWidth:Int, tableAddrWidth
 
   // dump pkg file input parameters
 
-  val rtlDir = os.pwd/"src"/"main"/"lib"/"HashTable"
+  val rtlDir = os.pwd/"generated_rtl"
   val pkgFile =
     s"""
       |// This is an auto-generated file.
@@ -202,9 +202,9 @@ class hash_table_top(keyWidth:Int, valWidth:Int, bucketWidth:Int, tableAddrWidth
       |endpackage
       |
       |""".stripMargin
-  os.write.over(rtlDir/"hash_table_pkg.sv", pkgFile)
+  os.write.over(rtlDir/s"hash_table_pkg_$pkgSurfix.sv", pkgFile)
 
-  addRTLPath("src/main/lib/HashTable/hash_table_pkg.sv")
+  addRTLPath(s"generated_rtl/hash_table_pkg_$pkgSurfix.sv")
   addRTLPath("src/main/lib/HashTable/CRC32_D32.sv")
   addRTLPath("src/main/lib/HashTable/altera_avalon_st_pipeline_base.v")
   addRTLPath("src/main/lib/HashTable/calc_hash.sv")
@@ -229,9 +229,10 @@ class hash_table_top(keyWidth:Int, valWidth:Int, bucketWidth:Int, tableAddrWidth
 
 }
 
-class HashTableDUT(keyWidth:Int, valWidth:Int, bucketWidth:Int, tableAddrWidth:Int) extends Component {
+class HashTableBB(conf: SysConfig, keyWidth:Int, valWidth:Int, bucketWidth:Int, tableAddrWidth:Int) extends Component {
   val io = new HashTableIO(keyWidth, valWidth, bucketWidth, tableAddrWidth)
-  val ht = new hash_table_top(keyWidth, valWidth, bucketWidth, tableAddrWidth)
+  val pkgSurfix = s"${conf.nTxnMan}t${conf.nNode}n${conf.nCh}c${conf.nLtPart}p"
+  val ht = new hash_table_top(keyWidth, valWidth, bucketWidth, tableAddrWidth, pkgSurfix)
   io.ht_cmd_if <> ht.io.ht_cmd_if
   io.ht_res_if <> ht.io.ht_res_if
   ht.io.ht_clear_ram_run <> io.ht_clear_ram_run

@@ -49,6 +49,7 @@ case class RdmaBaseT() extends Bundle {
   val params = UInt(512-64-64-32 bits) // 352b
 }
 
+/* old rdma req interface
 case class RdmaReqT() extends Bundle {
   val rsrvd = UInt(544-512-3-10-5 bits) // 14b
   val msg = UInt(512 bits) // RdmaBaseT or RPC
@@ -58,24 +59,21 @@ case class RdmaReqT() extends Bundle {
   val qpn = UInt(10 bits)
   val opcode = UInt(5 bits)
 }
+*/
 
-/* old rdma req interface
 case class RdmaReqT() extends Bundle {
-  val rsrvd = UInt(256-5-24-1-1-1-192 bits) // 32b
-  val pkg = UInt(192 bits) // RdmaBaseT or RPC
-  val mode = Bool()
+  val rsrvd = UInt(560-512-1-10-32 bits) // 5b
+  val msg = UInt(512 bits) // RdmaBaseT or RPC
   val host = Bool()
-  val id = UInt(1 bits)
-  val qpn = UInt(24 bits)
-  val opcode = UInt(5 bits)
-} */
-
+  val qpn = UInt(10 bits)
+  val opcode = UInt(32 bits) // Vitis HLS enum
+}
 
 class RdmaIO extends Bundle {
   // rd/wr cmd
   val rd_req = slave Stream StreamData(96)
   val wr_req = slave Stream StreamData(96)
-  val sq = master Stream StreamData(544)
+  val sq = master Stream StreamData(560)
 
   val axis_sink = slave Stream Axi4StreamData(512)
   val axis_src =  master Stream Axi4StreamData(512)

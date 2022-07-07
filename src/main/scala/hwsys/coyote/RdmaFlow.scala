@@ -39,7 +39,6 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
   sq.opcode := 1 // write
   sq.qpn := io.qpn
   sq.host := False
-  sq.mode := False
   sq.msg.assignFromBits(rdma_base.asBits)
   sq.rsrvd := 0
   io.rdma_1.sq.data.assignFromBits(sq.asBits)

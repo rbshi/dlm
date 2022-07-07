@@ -35,7 +35,7 @@ case class RamEntry(conf: SysConfig) extends Bundle{
 class LockTableNW(conf: SysConfig) extends Component {
 
   val io = new LockTableIO(conf, true)
-  val ht = new HashTableDUT(conf.wTId-log2Up(conf.nLtPart), conf.wHtValNW, conf.wHtBucket, conf.wHtTable)
+  val ht = new HashTableBB(conf, conf.wTId-log2Up(conf.nLtPart), conf.wHtValNW, conf.wHtBucket, conf.wHtTable)
 
   ht.io.setDefault()
 

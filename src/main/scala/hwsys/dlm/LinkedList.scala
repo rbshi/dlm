@@ -77,7 +77,7 @@ class LinkedListIO(keyWidth:Int, tableAddrWidth:Int) extends Bundle{
 }
 
 // parameters of blockbox is in sv package
-class linked_list_top(keyWidth:Int, tableAddrWidth:Int) extends BlackBox with RenameIO{
+class linked_list_top(keyWidth:Int, tableAddrWidth:Int, pkgSurfix:String) extends BlackBox with RenameIO{
 
   val io = new LinkedListIO(keyWidth, tableAddrWidth)
 
@@ -86,7 +86,7 @@ class linked_list_top(keyWidth:Int, tableAddrWidth:Int) extends BlackBox with Re
   noIoPrefix()
   addPrePopTask(renameIO)
 
-  val rtlDir = os.pwd/"src"/"main"/"lib"/"LinkedList"
+  val rtlDir = os.pwd/"generated_rtl"
   val pkgFile =
     s"""
        |// This is an auto-generated file.
@@ -165,9 +165,9 @@ class linked_list_top(keyWidth:Int, tableAddrWidth:Int) extends BlackBox with Re
        |endpackage
        |
        |""".stripMargin
-  os.write.over(rtlDir/"linked_list_pkg.sv", pkgFile)
+  os.write.over(rtlDir/s"linked_list_pkg_$pkgSurfix.sv", pkgFile)
 
-  addRTLPath("src/main/lib/LinkedList/linked_list_pkg.sv")
+  addRTLPath(s"generated_rtl/linked_list_pkg_$pkgSurfix.sv")
   addRTLPath("src/main/lib/LinkedList/data_table_delete.sv")
   addRTLPath("src/main/lib/LinkedList/data_table_insert.sv")
   addRTLPath("src/main/lib/LinkedList/data_table_dequeue.sv")
@@ -182,9 +182,10 @@ class linked_list_top(keyWidth:Int, tableAddrWidth:Int) extends BlackBox with Re
 }
 
 // blackbox needs a wrapper before being tested
-class LinkedListDut(keyWidth:Int, tableAddrWidth:Int) extends Component {
+class LinkedListBB(conf: SysConfig, keyWidth:Int, tableAddrWidth:Int) extends Component {
   val io = new LinkedListIO(keyWidth, tableAddrWidth)
-  val ll = new linked_list_top(keyWidth, tableAddrWidth)
+  val pkgSurfix = s"${conf.nTxnMan}t${conf.nNode}n${conf.nCh}c${conf.nLtPart}p"
+  val ll = new linked_list_top(keyWidth, tableAddrWidth, pkgSurfix)
   io.ll_cmd_if <> ll.io.ll_cmd_if
   io.ll_res_if <> ll.io.ll_res_if
   io.head_table_if <> ll.io.head_table_if

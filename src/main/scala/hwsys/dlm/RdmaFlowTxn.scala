@@ -64,8 +64,6 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
   sq.opcode := 1 // write
   sq.qpn := io.ctrl.qpn
   sq.host := False
-  sq.mode := False
-  sq.last := True
   sq.msg.assignFromBits(rdma_base.asBits)
   sq.rsrvd := 0
   io.rdma.sq.data.assignFromBits(sq.asBits)

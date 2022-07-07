@@ -17,7 +17,7 @@ class RdmaArb(cnt: Int) extends Component {
   io.rdmaV.foreach(_.flipDir())
 
   // pipe the sq
-  val sqV = Vec(Stream(StreamData(544)), cnt)
+  val sqV = Vec(Stream(StreamData(560)), cnt)
   (sqV, io.rdmaV).zipped.foreach(_ <-/< _.sq)
 
   // mstr interface arb
