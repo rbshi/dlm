@@ -19,7 +19,6 @@ object Helpers {
       switch(tokenAdd ## stream.fire) {
         is(True ## False)(cntToken := cntToken + 1)
         is(False ## True)(cntToken := cntToken - 1)
-        default()
       }
       stream.continueWhen(cntToken > 0)
     }
@@ -29,7 +28,6 @@ object Helpers {
       switch(tokenAdd ## tokenMinus) {
         is(True ## False)(cntToken := cntToken + 1)
         is(False ## True)(cntToken := cntToken - 1)
-        default()
       }
       stream.continueWhen(cntToken > 0)
     }

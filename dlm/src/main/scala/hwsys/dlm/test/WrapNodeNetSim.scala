@@ -15,7 +15,7 @@ class TwoNodeNetTop(implicit sysConf: SysConfig) extends Component {
 
 object WrapNodeNetSim {
 
-  def main(args: Array[String]): Unit = {
+  def main(): Unit = {
 
     implicit val sysConf = new SysConfig {
       override val nNode: Int = 2

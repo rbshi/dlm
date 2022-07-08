@@ -1,23 +1,32 @@
-import mill._, scalalib._
+import $ivy.`com.goyeau::mill-scalafix::0.2.8`
+import com.goyeau.mill.scalafix.ScalafixModule
+import mill._, scalalib._, scalafmt._
 
 val spinalVersion = "1.6.4"
+val scalaTestVersion = "3.2.11"
 
-object dlm extends SbtModule {
+trait CommonSpinalModule extends ScalaModule with ScalafmtModule with ScalafixModule {
   def scalaVersion = "2.12.14"
-  override def millSourcePath = os.pwd
+  def scalacOptions = Seq("-unchecked", "-deprecation", "-feature")
+
   def ivyDeps = Agg(
     ivy"com.github.spinalhdl::spinalhdl-core:$spinalVersion",
     ivy"com.github.spinalhdl::spinalhdl-lib:$spinalVersion",
+    ivy"com.github.spinalhdl::spinalhdl-sim:$spinalVersion",
     ivy"com.lihaoyi::os-lib:0.8.0",
     ivy"org.scala-stm::scala-stm:0.11.0"
-  )
-  def scalacPluginIvyDeps = Agg(ivy"com.github.spinalhdl::spinalhdl-idsl-plugin:$spinalVersion")
-
-  object test extends Tests {
-    def ivyDeps = Agg(
-      ivy"com.lihaoyi::utest:0.7.4",
     )
-    def testFrameworks = Seq("utest.runner.Framework")
-  }
 
+  def scalacPluginIvyDeps = Agg(ivy"com.github.spinalhdl::spinalhdl-idsl-plugin:$spinalVersion")
+  def scalafixIvyDeps = Agg(ivy"com.github.liancheng::organize-imports:0.6.0")
+}
+
+object dlm extends CommonSpinalModule {
+  object test extends Tests with TestModule.ScalaTest {
+    def ivyDeps = Agg(ivy"org.scalatest::scalatest:$scalaTestVersion")
+    def testFramework = "org.scalatest.tools.Framework"
+    def testSim(args: String*) = T.command {
+      super.runMain("org.scalatest.run", args: _*)
+    }
+  }
 }

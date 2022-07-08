@@ -181,7 +181,7 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
                 cntLkHoldWrLoc(curTxnId) := cntLkHoldWrLoc(curTxnId) + 1
                 goto(LOCAL_RD_REQ) // issue local rd req once get the lock
               }
-              is(LkT.insTab) ()
+              is(LkT.insTab){}
             }
           }
 
@@ -272,7 +272,7 @@ class TxnManCS(conf: SysConfig) extends Component with RenameIO {
                 cntLkHoldWrRmt(curTxnId) := cntLkHoldWrRmt(curTxnId) + 1
                 goto(RMT_RD_CONSUME) // issue local rd req once get the lock
               }
-              is(LkT.insTab) ()
+              is(LkT.insTab) {}
             }
           }
 

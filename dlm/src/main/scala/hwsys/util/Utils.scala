@@ -15,7 +15,6 @@ case class CntIncDec(bitCnt: BitCount, incFlag: Bool, decFlag: Bool) {
   switch(incFlag ## decFlag) {
     is(True ## False) (cnt := cnt + 1)
     is(False ## True) (cnt := cnt -1)
-    default ()
   }
 
   when(willClear) (cnt.clearAll())
@@ -34,7 +33,6 @@ case class CntDynmicBound(upBoundEx: UInt, incFlag: Bool, decFlag: Bool = False)
   switch(incFlag ## decFlag) {
     is(True ## False) (cnt := cnt + 1)
     is(False ## True) (cnt := cnt -1)
-    default ()
   }
 
   when(willClear || (willOverflowIfInc && incFlag)) (cnt.clearAll())
@@ -52,7 +50,6 @@ case class AccumIncDec(bitCnt: BitCount, incFlag: Bool, decFlag: Bool, incVal: U
     is(True ## True) (accum := accum + incVal - decVal)
     is(True ## False) (accum := accum + incVal)
     is(False ## True) (accum := accum - decVal)
-    default ()
   }
 
   when(willClear) (accum.clearAll())

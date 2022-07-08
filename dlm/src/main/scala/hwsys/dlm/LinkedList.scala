@@ -168,17 +168,17 @@ class linked_list_top(keyWidth:Int, tableAddrWidth:Int, pkgSurfix:String) extend
   os.write.over(rtlDir/s"linked_list_pkg_$pkgSurfix.sv", pkgFile)
 
   addRTLPath(s"generated_rtl/linked_list_pkg_$pkgSurfix.sv")
-  addRTLPath("src/main/lib/LinkedList/data_table_delete.sv")
-  addRTLPath("src/main/lib/LinkedList/data_table_insert.sv")
-  addRTLPath("src/main/lib/LinkedList/data_table_dequeue.sv")
-  addRTLPath("src/main/lib/LinkedList/empty_ptr_storage.sv")
-  addRTLPath("src/main/lib/LinkedList/head_table_if.sv")
-  addRTLPath("src/main/lib/LinkedList/ht_res_if.sv")
-  addRTLPath("src/main/lib/LinkedList/ht_res_mux.sv")
-  addRTLPath("src/main/lib/LinkedList/linked_list.sv")
-  addRTLPath("src/main/lib/LinkedList/rd_data_val_helper.sv")
-  addRTLPath("src/main/lib/LinkedList/true_dual_port_ram_single_clock.sv")
-  addRTLPath("src/main/lib/LinkedList/syncfifo.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/data_table_delete.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/data_table_insert.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/data_table_dequeue.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/empty_ptr_storage.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/head_table_if.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/ht_res_if.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/ht_res_mux.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/linked_list.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/rd_data_val_helper.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/true_dual_port_ram_single_clock.sv")
+  addRTLPath("dlm/src/main/lib/LinkedList/syncfifo.sv")
 }
 
 // blackbox needs a wrapper before being tested
