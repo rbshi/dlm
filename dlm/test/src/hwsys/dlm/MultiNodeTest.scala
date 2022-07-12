@@ -6,7 +6,7 @@ import hwsys.dlm.test._
 class MultiNodeTest extends AnyFunSuite {
 
   test("WrapNodeNetSim") {
-    WrapNodeNetSim.main()
+    WrapNodeNetSim.main(Array())
   }
 
 

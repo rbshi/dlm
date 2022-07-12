@@ -268,7 +268,11 @@ object SimDriver {
           // val reqVal = reqB.toBigInt()
 
           // FIXME: manually set the req.pkg.raddr (132:69) req.pkg.len (164:133) to reqT (vaddr@95:48, len@47:20)
-          val reqVal = (bigIntTruncVal(sqD, 69, 132) << 48) + (bigIntTruncVal(sqD, 133, 164) << 20)
+          // val reqVal = (bigIntTruncVal(sqD, 69, 132) << 48) + (bigIntTruncVal(sqD, 133, 164) << 20)
+
+          // FIXME: manually set the req.pkg.raddr (142:78) req.pkg.len (174:142) to reqT (vaddr@95:48, len@47:20)
+          val reqVal = (bigIntTruncVal(sqD, 78, 142) << 48) + (bigIntTruncVal(sqD, 142, 174) << 20)
+
 
           // enq local: rdReq, axiSrcCmd. Rmt: wrReq, axiSinkCmd
           for (enQ <- Seq(rdReqQ(idx), wrReqQ(getRmt(idx)), axiSrcCmdQ(idx), axiSinkCmdQ(getRmt(idx)))) {

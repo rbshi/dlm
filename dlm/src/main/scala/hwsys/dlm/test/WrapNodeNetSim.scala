@@ -15,7 +15,7 @@ class TwoNodeNetTop(implicit sysConf: SysConfig) extends Component {
 
 object WrapNodeNetSim {
 
-  def main(): Unit = {
+  def main(args: Array[String]): Unit = {
 
     implicit val sysConf = new SysConfig {
       override val nNode: Int = 2
@@ -28,7 +28,6 @@ object WrapNodeNetSim {
     SimConfig
       .withWave.compile {
       val dut = new TwoNodeNetTop()
-
       dut.n.foreach { m =>
         m.io.simPublic()
       }

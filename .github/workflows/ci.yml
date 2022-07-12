@@ -9,6 +9,7 @@ jobs:
   build-and-simulate:
     name: Build and Simulate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v2
       - uses: olafurpg/setup-scala@v10

@@ -61,9 +61,11 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
   rdma_base.params := 0
 
   val sq = RdmaReqT()
-  sq.opcode := 1 // write
+  sq.opcode := 0x0a // RC_RDMA_WRITE_ONLY
   sq.qpn := io.ctrl.qpn
   sq.host := False
+  sq.mode := False
+  sq.last := True
   sq.msg.assignFromBits(rdma_base.asBits)
   sq.rsrvd := 0
   io.rdma.sq.data.assignFromBits(sq.asBits)
@@ -92,7 +94,7 @@ class RdmaFlowTxn(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compone
     val fireC1: Bool = recvQ.io.availability >= (nFlyLkLine.cnt + (nFlyRdGet.accum<<sysConf.wMaxTupLen))
     // FIXME: 512 is the FIFO depth of reqQ
     val fireC2: Bool = 512 >= (nFlyLkLine.cnt + (nFlyWrCmt.accum<<sysConf.wMaxTupLen))
-    val fireC3: Bool = nFlyLkLine.cnt <= 256
+    val fireC3: Bool = nFlyLkLine.cnt <= 255
 
     // sendQ
     sendQ.io.push << io.q_sink.continueWhen(fireC1 && fireC2 && fireC3)
