@@ -17,7 +17,7 @@ class WrapSys(implicit sysConf: SysConfig) extends Component with RenameIO {
     // host data io
     val hostd = new HostDataIO
     // memory ports 0: host; others: user logic (may change)
-    val axi_mem = Vec(master(Axi4(sysConf.axiConf)), 16)
+    val axi_mem = Vec(master(Axi4(sysConf.axiConf)),1 + sysConf.nTxnMan + sysConf.nTxnAgent + sysConf.nTxnMan)
     // rdma
     val rdma_0 = new RdmaIO
   }

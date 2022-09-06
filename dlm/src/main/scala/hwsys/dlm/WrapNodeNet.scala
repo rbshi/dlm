@@ -15,8 +15,8 @@ class WrapNodeNet(implicit sysConf: SysConfig) extends Component {
   val nodeFlow = new WrapNode()
   nodeFlow.io.connectSomeByName(io.node)
 
-  val rdmaFlowMstr = new RdmaFlowTxn(isMstr = true)
-  val rdmaFlowSlve = new RdmaFlowTxn(isMstr = false)
+  val rdmaFlowMstr = new RdmaFlowBpss(isMstr = true)
+  val rdmaFlowSlve = new RdmaFlowBpss(isMstr = false)
   // connect rdma ctrl
   rdmaFlowMstr.io.ctrl <> io.rdmaCtrl(0)
   rdmaFlowSlve.io.ctrl <> io.rdmaCtrl(1)

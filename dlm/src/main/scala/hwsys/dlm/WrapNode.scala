@@ -30,8 +30,8 @@ class WrapNode(implicit sysConf: SysConfig) extends Component {
   txnManAry.zipWithIndex.foreach {case (txnMan, idx) =>
     txnMan.io.txnManId <> idx
     txnMan.io.axi <> io.axi(idx)
-    txnMan.io.lkReqLoc <> ltMCh.io.lt (idx).lkReq
-    txnMan.io.lkRespLoc <> ltMCh.io.lt (idx).lkResp
+    txnMan.io.lkReqLoc >/-> ltMCh.io.lt (idx).lkReq
+    txnMan.io.lkRespLoc <-/< ltMCh.io.lt (idx).lkResp
   }
 
   ltMCh.io.nodeId := io.nodeId

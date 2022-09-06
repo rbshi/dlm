@@ -36,9 +36,11 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
   rdma_base.params := 0
 
   val sq = RdmaReqT()
-  sq.opcode := 1 // write
+  sq.opcode := 1 // APP_WRITE -> move to RC_RDMA_WRITE_ONLY after `rdma_req_parser`
+  sq.opcode := 0xa // RDMA_WRITE_ONLY
   sq.qpn := io.qpn
   sq.host := False
+  sq.mode := True // RDMA_MODE_RAW, bypass the RDMA parser
   sq.msg.assignFromBits(rdma_base.asBits)
   sq.rsrvd := 0
   io.rdma_1.sq.data.assignFromBits(sq.asBits)

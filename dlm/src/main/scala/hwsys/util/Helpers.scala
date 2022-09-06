@@ -134,6 +134,24 @@ object Helpers {
 
 }
 
+object StreamBarrier {
+
+  /**
+   * Barrier two streams, return `isFire`
+   */
+  def apply[T1 <: Data,T2 <: Data](source1: Stream[T1], source2: Stream[T2], barrierVld: Bool): Bool = {
+    val barrierFire = Bool()
+    val rFire = Vec(Reg(Bool()), 2)
+    barrierFire := (rFire(0) && source2.fire) || (rFire(1) && source1.fire) || (source1.fire && source2.fire)
+    rFire(0).setWhen(source1.fire && ~barrierFire)
+    rFire(1).setWhen(source2.fire && ~barrierFire)
+    rFire.foreach(_.clearWhen(barrierFire))
+    source1.valid := ~rFire(0) && barrierVld
+    source2.valid := ~rFire(1) && barrierVld
+    barrierFire
+  }
+}
+
 
 
 

@@ -26,7 +26,8 @@ object WrapNodeNetSim {
     }
 
     SimConfig
-      .withWave.compile {
+      .withWave
+      .compile {
       val dut = new TwoNodeNetTop()
       dut.n.foreach { m =>
         m.io.simPublic()

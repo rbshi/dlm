@@ -27,14 +27,18 @@ trait SysConfig {
 
   def nTxnAgent = nNode -1
 
-  // CC mode: "NW", "BW"
-  def ccProt = "BW"
+  // CC mode: "NW (no wait)", "BW (bounded wait)", "TSO (timestamp ordering)"
+  // def ccProt = "NW"
+  // def ccProt = "BW"
+  def ccProt = "TSO"
 
   // txnMan params
   val nTxnCS = 64 // concurrent txn count, limited by axi arid (6 bits)
   val maxTxnLen = 64 // max len of each txn, space of on-chip mem (include the txnHd)
 
   val wTimeOut = 24
+
+  val wTimeStamp = 26 // say us precision, 64 seconds in total (10+10+6)
 
   def wMaxTxnLen= log2Up(maxTxnLen)
   def wLkIdx = log2Up(maxTxnLen) // lkIdx in one Txn, for OoO response
@@ -101,6 +105,7 @@ case class TxnEntry(conf: SysConfig) extends Bundle {
     lkReq.lkIdx := lkIdx
     lkReq.txnAbt := False
     lkReq.txnTimeOut := False
+    lkReq.tsTxn := 0 // FIXME: affect NW/BW cases?
     lkReq
   }
 }
@@ -115,10 +120,11 @@ case class LkReq(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
   val txnId = UInt(conf.wTxnId bits)
   val lkType = LkT()
   val lkRelease = Bool()
-  val txnTimeOut = (conf.ccProt=="BW") generate(Bool())
+  val txnTimeOut = (conf.ccProt=="BW") generate Bool()
   val txnAbt = Bool() // when req wr rlse, if txnAbt, then no data to commit
   val lkIdx = UInt(conf.wLkIdx bits)
   val wLen = UInt(conf.wTupLenPow bits)
+  val tsTxn = (conf.ccProt=="TSO") generate UInt(conf.wTimeStamp bits)
 }
 
 // TODO: now LkResp bypass all info in LkReq
@@ -176,7 +182,7 @@ case class RdmaCtrlIO() extends Bundle {
 }
 
 class NodeIO(implicit sysConf: SysConfig) extends Bundle {
-  val axi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan + sysConf.nNode -1)
+  val axi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan + sysConf.nTxnAgent)
   val cmdAxi = Vec(master(Axi4(sysConf.axiConf)), sysConf.nTxnMan)
 
   val nodeId = in UInt(sysConf.wNId bits)
