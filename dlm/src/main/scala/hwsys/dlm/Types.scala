@@ -7,6 +7,8 @@ import spinal.lib._
 import hwsys.coyote._
 import hwsys.util.Helpers._
 
+import scala.language.postfixOps
+
 
 trait SysConfig {
 
@@ -38,7 +40,7 @@ trait SysConfig {
 
   val wTimeOut = 24
 
-  val wTimeStamp = 26 // say us precision, 64 seconds in total (10+10+6)
+  val wTimeStamp = 32
 
   def wMaxTxnLen= log2Up(maxTxnLen)
   def wLkIdx = log2Up(maxTxnLen) // lkIdx in one Txn, for OoO response
@@ -108,6 +110,22 @@ case class TxnEntry(conf: SysConfig) extends Bundle {
     lkReq.tsTxn := 0 // FIXME: affect NW/BW cases?
     lkReq
   }
+
+  def toLkResp(srcNodeId: UInt, txnManId: UInt, curTxnId: UInt, release: Bool, lkIdx: UInt): LkResp = {
+    val lkResp = LkResp(this.conf, false) // process in txnMan, so false
+    lkResp.assignSomeByName(this)
+    lkResp.snId := srcNodeId
+    lkResp.txnManId := txnManId
+    lkResp.txnId := curTxnId
+    lkResp.lkRelease := release
+    lkResp.lkIdx := lkIdx
+    lkResp.txnAbt := False
+    lkResp.lkIdx := 0
+    lkResp.respType := LockRespType.grant
+    lkResp.lkWaited := False
+    lkResp
+  }
+
 }
 
 case class LkReq(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
@@ -156,6 +174,12 @@ case class LkResp(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
     lkReq
   }
 
+  def toTxnEntry(): TxnEntry = {
+    val txnEntry = TxnEntry(this.conf)
+    txnEntry.assignAllByName(this)
+    txnEntry
+  }
+
 }
 
 object LockTableIO {
@@ -192,7 +216,7 @@ class NodeIO(implicit sysConf: SysConfig) extends Bundle {
 
   val done = out Vec(Bool(), sysConf.nTxnMan)
   val cntTxnCmt, cntTxnAbt, cntTxnLd = out Vec(UInt(32 bits), sysConf.nTxnMan)
-  val cntClk = out Vec(UInt(40 bits), sysConf.nTxnMan)
+  val cntClk = out Vec(UInt(sysConf.wTimeStamp bits), sysConf.nTxnMan)
 }
 
 // Node + Q IO
@@ -308,7 +332,7 @@ case class TxnManCSIO(conf: SysConfig) extends Bundle {
 
   val done = out(Reg(Bool())).init(False)
   val cntTxnCmt, cntTxnAbt, cntTxnLd = out(Reg(UInt(32 bits))).init(0)
-  val cntClk = out(Reg(UInt(40 bits))).init(0)
+  val cntClk = out(Reg(UInt(conf.wTimeStamp bits))).init(0)
 
   def setDefault() = {
 
@@ -333,6 +357,13 @@ case class TxnManCSIO(conf: SysConfig) extends Bundle {
 // Lock types: Read, Write, ReadAndWrite, insertTab ()
 object LkT extends SpinalEnum {
   val rd, wr, raw, insTab = newElement()
+}
+
+case class tsWrEntry(conf: SysConfig) extends Bundle {
+  val txnId = UInt(conf.wTxnId bits)
+  val ts = UInt(conf.wTimeStamp bits)
+  val addr = UInt(64 bits) // FIXME: use hbm addr width?
+  val isWr = Bool()
 }
 
 

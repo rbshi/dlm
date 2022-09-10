@@ -139,17 +139,35 @@ object StreamBarrier {
   /**
    * Barrier two streams, return `isFire`
    */
-  def apply[T1 <: Data,T2 <: Data](source1: Stream[T1], source2: Stream[T2], barrierVld: Bool): Bool = {
+  def apply[T1 <: Data,T2 <: Data](src0: Stream[T1], src1: Stream[T2], barrierVld: Bool): Bool = {
     val barrierFire = Bool()
     val rFire = Vec(Reg(Bool()), 2)
-    barrierFire := (rFire(0) && source2.fire) || (rFire(1) && source1.fire) || (source1.fire && source2.fire)
-    rFire(0).setWhen(source1.fire && ~barrierFire)
-    rFire(1).setWhen(source2.fire && ~barrierFire)
+    barrierFire := (rFire(0) && src1.fire) || (rFire(1) && src0.fire) || (src0.fire && src1.fire)
+    rFire(0).setWhen(src0.fire && ~barrierFire)
+    rFire(1).setWhen(src1.fire && ~barrierFire)
     rFire.foreach(_.clearWhen(barrierFire))
-    source1.valid := ~rFire(0) && barrierVld
-    source2.valid := ~rFire(1) && barrierVld
+    src0.valid := ~rFire(0) && barrierVld
+    src1.valid := ~rFire(1) && barrierVld
     barrierFire
   }
+
+  def apply[T1 <: Data, T2 <: Data, T3 <: Data](src0: Stream[T1], src1: Stream[T2], src2: Stream[T3], barrierVld: Bool): Bool = {
+    val barrierFire = Bool()
+    val rFire = Vec(Reg(Bool()), 3)
+    barrierFire := (rFire(0) && rFire(1) && src2.fire) || (rFire(1) && rFire(2) && src0.fire) || (rFire(0) && rFire(2) && src1.fire) ||
+      (src0.fire && src1.fire && rFire(2)) || (src1.fire && src2.fire && rFire(0)) || (src0.fire && src2.fire && rFire(1)) ||
+      (src0.fire && src1.fire && src2.fire)
+    rFire(0).setWhen(src0.fire && ~barrierFire)
+    rFire(1).setWhen(src1.fire && ~barrierFire)
+    rFire(2).setWhen(src2.fire && ~barrierFire)
+    rFire.foreach(_.clearWhen(barrierFire))
+    src0.valid := ~rFire(0) && barrierVld
+    src1.valid := ~rFire(1) && barrierVld
+    src2.valid := ~rFire(2) && barrierVld
+    barrierFire
+  }  
+  
+  
 }
 
 
