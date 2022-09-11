@@ -32,18 +32,17 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
   val txnWrMemRmt = Mem(TxnEntry(conf), conf.dTxnMem)
 
   // store txns for local tsReq (for response on tsAxi.r)
-  val tsReqMemLoc = Mem(TxnEntry(conf), conf.dTxnMem)
+  val tsReqMemLoc = Mem(LkReq(conf, isTIdTrunc = false), conf.dTxnMem)
 
   // store the granted wr items to release
   val lkWrMemLoc = Mem(LkResp(conf, isTIdTrunc = false), conf.dTxnMem)
   val lkWrMemRmt = Mem(LkResp(conf, isTIdTrunc = false), conf.dTxnMem)
 
-
   // context registers
   // NOTE: separate local / remote; some reg is redundant (may be simplified)
-  val cntLkReqLoc, cntLkReqRmt, cntLkRespLocTab, cntLkRespLocMem, cntLkRespRmt, cntLkHoldLoc, cntLkHoldRmt,
+  val cntLkReqLoc, cntLkReqRmt, cntLkRespLocTab, cntLkRespLocMem, cntLkRespRmt,
   cntLkReqWrLoc, cntLkReqWrRmt, cntLkHoldWrLoc, cntLkHoldWrRmt, cntCmtReqLoc, cntCmtReqRmt, cntCmtRespLoc, cntCmtRespRmt,
-  cntRlseReqLoc, cntRlseReqRmt, cntRlseReqWrLoc, cntRlseReqWrRmt,
+  cntRlseReqWrLoc, cntRlseReqWrRmt,
   cntTsRlseRdPush, cntTsRlseRdPop,  cntTsRlseWrPush, cntTsRlseWrPop
   = Vec(Reg(UInt(conf.wMaxTxnLen bits)).init(0), conf.nTxnCS)
 
@@ -53,9 +52,9 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
   val tsWrRdReq, tsWrWrReq = Stream(tsWrEntry(conf))
   val tsWr = StreamArbiterFactory.roundRobin.noLock.onArgs(tsWrRdReq, tsWrWrReq)
 
-  val tsRlseEntryRd = Stream(TxnEntry(conf))
+  val tsRlseEntryRd = Stream(LkReq(conf, isTIdTrunc = false))
   // push while tsWrRd/tsWrWr.fire and pop while tsAxi.b.fire
-  val tsRlseMemRdLoc, tsRlseMemWrLoc = Mem(TxnEntry(conf), conf.dTxnMem)
+  val tsRlseMemRdLoc, tsRlseMemWrLoc = Mem(LkReq(conf, isTIdTrunc = false), conf.dTxnMem)
 
   // status register
   val rAbort = Vec(RegInit(False), conf.nTxnCS)
@@ -101,7 +100,6 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
     val CS_TXN = new State with EntryPoint
     val RD_TXN = new State
 
-
     val curTxnId = Reg(UInt(conf.wTxnId bits)).init(0)
 
     val txnMemRdCmd = Stream(UInt(conf.wTxnMemAddr bits))
@@ -137,10 +135,17 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
     }
 
     // tsReq (on-chip req table) payload
+    val txnMemRdToLkReq = txnMemRd.toLkReq(io.nodeId, io.txnManId, curTxnId, False, reqIdx)
     for (e <- Seq(lkReqGetLoc, lkReqGetRmt))
-      e.payload := txnMemRd.toLkReq(io.nodeId, io.txnManId, curTxnId, False, reqIdx)
+      e.payload := txnMemRdToLkReq
+
     // tsReq (off-chip ts) payload on `tsAxi`
     // TODO: address calculation based on instruction
+    tsAxi.ar.addr := ((txnMemRd.tId << 6) + (txnMemRd.cId << conf.wChSize)).resized
+    tsAxi.ar.id := curTxnId
+    tsAxi.ar.len := 0 // 64 bit
+    tsAxi.ar.size := log2Up(512 / 8)
+    tsAxi.ar.setBurstINCR()
 
     // barrier the fire of reqTab & txAxi
     val barrierLocVld = Bool().default(False)
@@ -156,11 +161,13 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
       txnMemRdCmd.payload := lkReqFire ? (txnCntAddr + 1) | txnCntAddr // backpressure
       txnMemRd.ready := lkReqFire
 
-      //TODO: process `insTab` request
-
       // issue lkReq to local / rmt
       switch(isLocal) {
-        is(True)(barrierLocVld := txnMemRd.valid)
+        is(True) {
+          // if LkT.instTab, only send to ReqTab
+          // when(txnMemRd.lkType === LkT.insTab)(lkReqGetLoc.valid := txnMemRd.valid) otherwise
+          barrierLocVld := txnMemRd.valid
+        }
         is(False)(lkReqGetRmt.valid := txnMemRd.valid)
       }
 
@@ -169,7 +176,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
         reqIdx := reqIdx + 1
         switch(isLocal) {
           is(True){
-            tsReqMemLoc.write(txnOffs + cntLkReqLoc(curTxnId), txnMemRd.payload)
+            tsReqMemLoc.write(txnOffs + cntLkReqLoc(curTxnId), txnMemRdToLkReq)
             cntLkReqLoc(curTxnId) := cntLkReqLoc(curTxnId) + 1
           }
           is(False)(cntLkReqRmt(curTxnId) := cntLkReqRmt(curTxnId) + 1)
@@ -187,6 +194,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
             }
           }
         }
+        when(isLocal && txnMemRd.lkType === LkT.insTab) {}
       }
 
       // NOTE: lkReq of next Txn OR if abort, stop issue the req
@@ -214,31 +222,40 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
 
     // ctx switch (two individual sets for tsAxi.resp & lkRespLoc)
     // ctx switch: tsAxi (curTxnId: tsAxi.rid.truncated, cnt++ as axi with same id is in order)
-    // Timing: tsAxi.r.fire / curTxnIdTsAxi / txnOffsTsAxi => rCurTxnIdTsAxi / txnEntryRespTsAxi => rrCurTxnIdTsAxi / rTxnEntryRespTsAxi
+    
+    // Timing: tsAxi.r.fire / curTxnIdTsAxi / txnOffsTsAxi => rCurTxnIdTsAxi / tsReqTsAxi => rrCurTxnIdTsAxi / rtsReqTsAxi
+    
     val curTxnIdTsAxi = tsAxi.r.id // no need to .trim(1) as tsAxi.r.id is only 5 bits
     val rCurTxnIdTsAxi = RegNextWhen(curTxnIdTsAxi, tsAxi.r.fire)
     val rrCurTxnIdTsAxi = RegNext(rCurTxnIdTsAxi)
+
     val txnOffsTsAxi = curTxnIdTsAxi << conf.wMaxTxnLen
-    val txnEntryRespTsAxi = tsReqMemLoc.readSync(txnOffsTsAxi + cntLkRespLocMem(curTxnIdTsAxi))
-    val rTxnEntryRespTsAxi = RegNext(txnEntryRespTsAxi)
+    val tsReqTsAxi = tsReqMemLoc.readSync(txnOffsTsAxi + cntLkRespLocMem(curTxnIdTsAxi))
+    val rtsReqTsAxi = RegNext(tsReqTsAxi)
+
     when(tsAxi.r.fire)(cntLkRespLocMem(curTxnIdTsAxi) := cntLkRespLocMem(curTxnIdTsAxi) + 1) // TODO: abstract this
     val rcntLkRespLocMem = RegNext(cntLkRespLocMem(curTxnIdTsAxi))
     val rTsAxiRdFire = RegNext(tsAxi.r.fire)
 
-    // function logic
-    // TODO: TS compare logic
-    val tsAxiIsGrant = True
+    val tsAxiRdTS = tsAxi.r.data(conf.wTimeStamp-1 downto 0).asUInt
+    val tsAxiWrTS = tsAxi.r.data(conf.wTimeStamp*2-1 downto conf.wTimeStamp).asUInt
 
+    // function logic
+    // NOTE: has tsAxi resp for insTab
+    val tsAxiIsGrant = ((tsReqTsAxi.lkType === LkT.rd) ? (tsAxiRdTS < tsTxn(rCurTxnIdTsAxi)) |
+      (tsAxiRdTS < tsTxn(rCurTxnIdTsAxi) && tsAxiWrTS < tsTxn(rCurTxnIdTsAxi))) || tsReqTsAxi.lkType === LkT.insTab
 
     // ctx switch: lkRespLoc
+    
     // Timing: lkRespLoc.fire / curTxnIdLkRespLoc => rCurTxnIdLkRespLoc / rLkRespLoc
+    
     val curTxnIdLkRespLoc = io.lkRespLoc.txnId
-    val rLkRespLoc = RegNextWhen(io.lkRespLoc, io.lkRespLoc.fire)
+    val rLkRespLoc = RegNextWhen(io.lkRespLoc.payload, io.lkRespLoc.fire)
     val txnOffsLkRespLoc = curTxnIdLkRespLoc << conf.wMaxTxnLen
 
     // interaction between lkRespLoc & tsAxi.r
     io.lkRespLoc.ready := isActive(WAIT_RESP)
-    tsAxi.r.ready := isActive(WAIT_RESP)
+    tsAxi.r.ready := isActive(WAIT_RESP) && ~io.lkRespLoc.fire // avoid tsAxi.r and lkResp fire in the same cycle
 
     val tsUpSel = Bool().default(False)
     val rTsUpSel = RegNext(tsUpSel).init(False) // TsUp info selection between tsAxi (1) and lkResp (0)
@@ -258,7 +275,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
           // check lkRespLoc grant
           when(rRespStatusTab(rCurTxnIdTsAxi)(rcntLkRespLocMem)){
             // operation granted
-            switch(txnEntryRespTsAxi.lkType){
+            switch(tsReqTsAxi.lkType){
               is(LkT.rd){
                 tsUpSel.set()
                 goto(LOCAL_RD_REQ_UPTS)
@@ -273,67 +290,54 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
                 cntLkHoldWrLoc(rCurTxnIdTsAxi) := cntLkHoldWrLoc(rCurTxnIdTsAxi) + 1
                 goto(LOCAL_RD_REQ_UPTS)
               }
-              is(LkT.insTab)()
+              is(LkT.insTab)() // will not happen
             }
           }
-        } otherwise {
-          // case: abort
-          rAbort(rCurTxnIdTsAxi) := True
-        }
+        } otherwise (rAbort(rCurTxnIdTsAxi) := True)
       }
 
       // lkRespLoc.fire
       when(io.lkRespLoc.fire) {
         cntLkRespLocTab(curTxnIdLkRespLoc) := cntLkRespLocTab(curTxnIdLkRespLoc) + 1
-        switch(io.lkRespLoc.respType) {
-          // case: grant
-          is(LockRespType.grant) {
-            // set rRespStatus
-            rRespStatusTab(curTxnIdLkRespLoc)(io.lkRespLoc.lkIdx).set()
-            // check tsAxi grant
-            when(rRespStatusMem(curTxnIdLkRespLoc)(io.lkRespLoc.lkIdx)) {
-              // operation grant
-              switch(io.lkRespLoc.lkType) {
-                is(LkT.rd){
-                  goto(LOCAL_RD_REQ_UPTS)
-                }
-                is(LkT.wr) {
-                  enWrLkMemLocLkResp.set()
-                  cntLkHoldWrLoc(curTxnIdLkRespLoc) := cntLkHoldWrLoc(curTxnIdLkRespLoc) + 1
-                }
-                is(LkT.raw) {
-                  enWrLkMemLocLkResp.set()
-                  cntLkHoldWrLoc(curTxnIdLkRespLoc) := cntLkHoldWrLoc(curTxnIdLkRespLoc) + 1
-                  goto(LOCAL_RD_REQ_UPTS)
-                }
-                is(LkT.insTab)()
+        when(io.lkRespLoc.respType === LockRespType.grant) {
+          // set rRespStatus
+          rRespStatusTab(curTxnIdLkRespLoc)(io.lkRespLoc.lkIdx).set()
+          // check tsAxi grant
+          when(rRespStatusMem(curTxnIdLkRespLoc)(io.lkRespLoc.lkIdx)) {
+            // operation grant
+            switch(io.lkRespLoc.lkType) {
+              is(LkT.rd) {
+                goto(LOCAL_RD_REQ_UPTS)
               }
-            } otherwise {
-              // case: abort
-              rAbort(curTxnIdLkRespLoc) := True
+              is(LkT.wr) {
+                enWrLkMemLocLkResp.set()
+                cntLkHoldWrLoc(curTxnIdLkRespLoc) := cntLkHoldWrLoc(curTxnIdLkRespLoc) + 1
+              }
+              is(LkT.raw) {
+                enWrLkMemLocLkResp.set()
+                cntLkHoldWrLoc(curTxnIdLkRespLoc) := cntLkHoldWrLoc(curTxnIdLkRespLoc) + 1
+                goto(LOCAL_RD_REQ_UPTS)
+              }
+              is(LkT.insTab)()
             }
           }
-        }
+        } otherwise (rAbort(curTxnIdLkRespLoc) := True)
       }
 
-      // FIXME: double check
       lkWrMemLoc.write(tsUpSel ? ((rCurTxnIdTsAxi << conf.wMaxTxnLen) + cntLkHoldWrLoc(rCurTxnIdTsAxi)) |
         ((curTxnIdLkRespLoc << conf.wMaxTxnLen) + cntLkHoldWrLoc(curTxnIdLkRespLoc)),
-        tsUpSel ? txnEntryRespTsAxi.toLkResp(io.nodeId, io.txnManId, rCurTxnIdTsAxi, False, 0) | io.lkRespLoc.payload,
+        tsUpSel ? tsReqTsAxi.toLkResp() | io.lkRespLoc.payload,
         enWrLkMemLocTsAxi | enWrLkMemLocLkResp)
 
     }
 
-    // TODO: data path
-    // FIXME: tId -> addr translation logic
-    // txnAxi.ar.addr := (((rLkResp.tId << rLkResp.wLen) << 6) + (rLkResp.cId << conf.wChSize)).resized
-
+    // TODO: tId -> addr translation logic
     // data interface on txnAxi: if rTsUpSel, use the resp info on tsAxi; otherwise, use lkResp
-    val tupStartAddr = rTsUpSel ? ((rTxnEntryRespTsAxi.tId << 6) + (rTxnEntryRespTsAxi.cId << conf.wChSize)).resized | ((rLkRespLoc.tId << 6) + (rLkRespLoc.cId << conf.wChSize)).resized
+    val tupStartAddr = rTsUpSel ? ((rtsReqTsAxi.tId << 6) + (rtsReqTsAxi.cId << conf.wChSize)).resized | ((rLkRespLoc.tId << 6) + (rLkRespLoc.cId << conf.wChSize)).resized
     txnAxi.ar.addr := tupStartAddr // start with 64-bit r&w timestamp
     val txnId = rTsUpSel ? rrCurTxnIdTsAxi | rLkRespLoc.txnId
     txnAxi.ar.id := txnId
-    txnAxi.ar.len := rTsUpSel ? ((U(1) << rTxnEntryRespTsAxi.wLen)-1) | ((U(1) << rLkRespLoc.wLen) - 1)
+    txnAxi.ar.len := rTsUpSel ? ((U(1) << rtsReqTsAxi.wLen)-1) | ((U(1) << rLkRespLoc.wLen) - 1)
     txnAxi.ar.size := log2Up(512 / 8)
     txnAxi.ar.setBurstINCR()
 
@@ -342,16 +346,14 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
     tsWrRdReq.addr := tupStartAddr
     tsWrRdReq.isWr := False
 
-    tsRlseEntryRd.payload := rTsUpSel ? rTxnEntryRespTsAxi | rLkRespLoc.toTxnEntry()
+    tsRlseEntryRd.payload := rTsUpSel ? rtsReqTsAxi | rLkRespLoc.toLkRlseReq(False, 0, False)
 
     // barrier the txnAxi.ar & ts update queue (sharing the tsAxi.aw,w with commit logic), insert the lkEntry & ts update
     val barrierFireTxnRdTsWr = StreamBarrier(txnAxi.ar, tsWrRdReq, tsRlseEntryRd, isActive(LOCAL_RD_REQ_UPTS))
 
-    val txnOffs = txnId << conf.wMaxTxnLen
-
     LOCAL_RD_REQ_UPTS.whenIsActive {
       // write tsRlseEntryRd to tsRlseRdLoc memory for release purpose
-      tsRlseMemRdLoc.write(txnOffs + cntTsRlseRdPush(txnId), tsRlseEntryRd, barrierFireTxnRdTsWr)
+      tsRlseMemRdLoc.write((txnId << conf.wMaxTxnLen) + cntTsRlseRdPush(txnId), tsRlseEntryRd, barrierFireTxnRdTsWr)
       when(barrierFireTxnRdTsWr){
         cntTsRlseRdPush(txnId) := cntTsRlseRdPush(txnId) + 1
         goto(WAIT_RESP)
@@ -445,7 +447,6 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
           goto(CS_TXN)
         }
       }
-      // txnAxi.b will be tackled in component3
     }
   }
 
@@ -487,7 +488,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
     tsWrWrReq.addr := ((lkItem.tId << 6) + (lkItem.cId << conf.wChSize)).resized
     tsWrWrReq.isWr := True
 
-    lkReqRlseLocAbt.payload := lkItem.toLkRlseReq(rAbort(curTxnId), lkItem.lkIdx, False)
+    lkReqRlseLocAbt.payload := lkItem.toLkRlseReq(True, lkItem.lkIdx, False)
 
     LOCAL_WR_REQ_UPTS.whenIsActive {
       when(rAbort(curTxnId)) {
@@ -500,7 +501,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
       } otherwise {
         // else release with commit, TsUpdate on tsWrWrReq & push entry to tsRlseEntryWr for release
         tsWrWrReq.valid.set()
-        tsRlseMemWrLoc.write(txnOffs+cntTsRlseWrPush(curTxnId), lkItem.toTxnEntry(), tsWrWrReq.fire)
+        tsRlseMemWrLoc.write(txnOffs+cntTsRlseWrPush(curTxnId), lkItem.toLkRlseReq(False, lkItem.lkIdx, False), tsWrWrReq.fire)
         when(tsWrWrReq.fire){
           cntTsRlseWrPush(curTxnId) := cntTsRlseWrPush(curTxnId) + 1
           cntRlseReqWrLoc(curTxnId) := cntRlseReqWrLoc(curTxnId) + 1 // FIXME: too early to increase?
@@ -519,13 +520,13 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
 
     val FIRE_B = new State with EntryPoint
     val FIRE_RELEASE = new State
-
-    val isRlseRd = cntTsRlseRdPush(tsAxi.b.id) =/= cntTsRlseRdPop(tsAxi.b.id) // PushPtr > PopPtr
+    // PushPtr > PopPtr, as all rdTsUp must happen before wrTsUp
+    val isRlseRd = cntTsRlseRdPush(tsAxi.b.id) =/= cntTsRlseRdPop(tsAxi.b.id)
     val txnOffs = tsAxi.b.id << conf.wMaxTxnLen
-    val txnEntryRd = tsRlseMemRdLoc.readSync(txnOffs + cntTsRlseRdPop(tsAxi.b.id))
-    val txnEntryWr = tsRlseMemWrLoc.readSync(txnOffs + cntTsRlseWrPop(tsAxi.b.id))
+    val tsRlseRd = tsRlseMemRdLoc.readSync(txnOffs + cntTsRlseRdPop(tsAxi.b.id))
+    val tsRlseWr = tsRlseMemWrLoc.readSync(txnOffs + cntTsRlseWrPop(tsAxi.b.id))
 
-    lkReqRlseLocNrm.payload := isRlseRd ? txnEntryRd.toLkReq(io.nodeId, io.txnManId, tsAxi.b.id, True, 0) | txnEntryWr.toLkReq(io.nodeId, io.txnManId, tsAxi.b.id, True, 0)
+    lkReqRlseLocNrm.payload := isRlseRd ? tsRlseRd | tsRlseWr
 
     FIRE_B.whenIsActive {
       tsAxi.b.ready := True
@@ -543,7 +544,6 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
       lkReqRlseLocNrm.valid.set()
       when(lkReqRlseLocNrm.fire)(goto(FIRE_B))
     }
-
   }
 
 
@@ -554,7 +554,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
   val rlseDoneCtrlLoc = new Area {
     val rCurTxnId = RegNextWhen(io.lkReqLoc.txnId, io.lkReqLoc.fire) // stage also when lkGet
     val rFire = RegNext(lkReqRlseLocAbt.fire | lkReqRlseLocNrm.fire, False)
-    val getAllLkRlse = (cntRlseReqLoc(rCurTxnId) === cntLkHoldLoc(rCurTxnId)) && (cntRlseReqRmt(rCurTxnId) === cntLkHoldRmt(rCurTxnId))
+    val getAllWrRlse = (cntRlseReqWrLoc(rCurTxnId) === cntLkHoldWrLoc(rCurTxnId)) && (cntRlseReqWrRmt(rCurTxnId) === cntLkHoldWrRmt(rCurTxnId))
     val getAllLkResp = (cntLkReqLoc(rCurTxnId) === cntLkRespLocMem(rCurTxnId)) && (cntLkReqLoc(rCurTxnId) === cntLkRespLocTab(rCurTxnId)) &&
       (cntLkReqRmt(rCurTxnId) === cntLkRespRmt(rCurTxnId))
     /**
@@ -563,7 +563,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
      * 2. getAllRlse && getAllLkResp
      * 3. rReqDone
      * */
-    when(rFire && (getAllLkRlse && getAllLkResp) && rReqDone(rCurTxnId)) {
+    when(rFire && (getAllWrRlse && getAllLkResp) && rReqDone(rCurTxnId)) {
       rRlseDone(rCurTxnId).set()
       when(rAbort(rCurTxnId))(io.cntTxnAbt := io.cntTxnAbt + 1) otherwise (io.cntTxnCmt := io.cntTxnCmt + 1)
     }
@@ -575,10 +575,11 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
   val rlseDoneCtrlRmt = new Area {
     val rCurTxnId = RegNextWhen(io.lkReqRmt.txnId, io.lkReqRmt.fire) // stage also when lkGet
     val rFire = RegNext(lkReqRlseRmt.fire, False)
-    val getAllLkRlse = (cntRlseReqLoc(rCurTxnId) === cntLkHoldLoc(rCurTxnId)) && (cntRlseReqRmt(rCurTxnId) === cntLkHoldRmt(rCurTxnId))
+    val getAllWrRlse = (cntRlseReqWrLoc(rCurTxnId) === cntLkHoldWrLoc(rCurTxnId)) && (cntRlseReqWrRmt(rCurTxnId) === cntLkHoldWrRmt(rCurTxnId))
     val getAllLkResp = (cntLkReqLoc(rCurTxnId) === cntLkRespLocMem(rCurTxnId)) && (cntLkReqLoc(rCurTxnId) === cntLkRespLocTab(rCurTxnId)) &&
       (cntLkReqRmt(rCurTxnId) === cntLkRespRmt(rCurTxnId))
-    when(rFire && (getAllLkRlse && getAllLkResp) && rReqDone(rCurTxnId)) {
+
+    when(rFire && (getAllWrRlse && getAllLkResp) && rReqDone(rCurTxnId)) {
       rRlseDone(rCurTxnId).set()
       when(rAbort(rCurTxnId))(io.cntTxnAbt := io.cntTxnAbt + 1) otherwise (io.cntTxnCmt := io.cntTxnCmt + 1)
     }
@@ -683,11 +684,13 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
       when(cntTxnWordInLine.willOverflow)(rTxnMemLd.clear())
       
       when(cntTxnWord.willOverflow) {
-        //TODO: clear all cnt register
-        for (e <- Seq(cntLkReqLoc, cntLkReqRmt, cntLkRespLocTab, cntLkRespLocMem, cntLkRespRmt, cntLkHoldLoc, cntLkHoldRmt,
+        // clear all cnt register
+        for (e <- Seq(cntLkReqLoc, cntLkReqRmt, cntLkRespLocTab, cntLkRespLocMem, cntLkRespRmt,
           cntLkReqWrLoc, cntLkReqWrRmt, cntLkHoldWrLoc, cntLkHoldWrRmt, cntCmtReqLoc, cntCmtReqRmt, cntCmtRespLoc, cntCmtRespRmt,
-          cntRlseReqLoc, cntRlseReqRmt, cntRlseReqWrLoc, cntRlseReqWrRmt,
-          cntTsRlseRdPush, cntTsRlseRdPop, cntTsRlseWrPush, cntTsRlseWrPop))
+          cntRlseReqWrLoc, cntRlseReqWrRmt,
+          cntTsRlseRdPush, cntTsRlseRdPop, cntTsRlseWrPush, cntTsRlseWrPop,
+          // TODO: other status regs
+        ))
           e(curTxnId) := U(0, conf.wMaxTxnLen bits) // why the clearAll() DOES NOT work?
 
         for (e <- Seq(rReqDone, rAbort, rRlseDone))

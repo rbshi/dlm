@@ -143,6 +143,14 @@ case class LkReq(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
   val lkIdx = UInt(conf.wLkIdx bits)
   val wLen = UInt(conf.wTupLenPow bits)
   val tsTxn = (conf.ccProt=="TSO") generate UInt(conf.wTimeStamp bits)
+
+  def toLkResp(): LkResp = {
+    val lkResp = LkResp(this.conf, false) // process in txnMan, so false
+    lkResp.assignSomeByName(this)
+    lkResp.respType := LockRespType.grant
+    lkResp.lkWaited := False
+    lkResp
+  }
 }
 
 // TODO: now LkResp bypass all info in LkReq
