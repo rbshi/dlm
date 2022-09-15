@@ -20,7 +20,7 @@ case class LockEntry(conf: SysConfig) extends Bundle{
 
 case class RamEntry(conf: SysConfig) extends Bundle{
 
-  val net_ptr_val = Bool()
+  val next_ptr_val = Bool()
   val next_ptr = UInt(conf.wHtTable bits)
   val lock_status = Bool() // sh,ex
   val owner_cnt = UInt(conf.wOwnerCnt bits)
@@ -77,7 +77,7 @@ class LockTableNW(conf: SysConfig) extends Component {
     INSET_RESP.whenIsActive {
       ht.io.update_addr := ht.io.ht_res_if.find_addr
       val htNewRamEntry = RamEntry(conf)
-      htNewRamEntry.net_ptr_val := htRamEntry.net_ptr_val
+      htNewRamEntry.next_ptr_val := htRamEntry.next_ptr_val
       htNewRamEntry.next_ptr := htRamEntry.next_ptr
       htNewRamEntry.lock_status := htRamEntry.lock_status
       htNewRamEntry.key := htRamEntry.key

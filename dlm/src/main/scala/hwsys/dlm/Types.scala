@@ -151,6 +151,14 @@ case class LkReq(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
     lkResp.lkWaited := False
     lkResp
   }
+
+  def isWr: Bool = {
+    this.lkType === LkT.wr || this.lkType === LkT.raw
+  }
+
+  def isRd: Bool = {
+    this.lkType === LkT.rd || this.lkType === LkT.rd
+  }
 }
 
 // TODO: now LkResp bypass all info in LkReq
