@@ -9,22 +9,84 @@ import spinal.core.Component.push
 class TxnAgentTSO (conf: SysConfig) extends Component {
 
   val io = TxnAgentIO(conf)
+
+  // axi arbiter to demux io.axi
+  val axiRdArb = Axi4ReadOnlyArbiter(conf.axiConf, 2)
+  val axiWrArb = Axi4WriteOnlyArbiter(conf.axiConf, 2, 0)
+  axiRdArb.io.output <> io.axi.toReadOnly()
+  axiWrArb.io.output <> io.axi.toWriteOnly()
+
+  // DEMUX the Axi to tsAxi & txnAxi
+  val axiConfDemux = Axi4Config(
+    addressWidth = 64,
+    dataWidth = 512,
+    idWidth = 5,
+    useStrb = true,
+    useBurst = true,
+    useId = true,
+    useLock = false,
+    useRegion = false,
+    useCache = false,
+    useProt = false,
+    useQos = false,
+    useLen = true
+  )
+  val txnAxi, tsAxi = master(Axi4(axiConfDemux))
+  txnAxi.toReadOnly() <> axiRdArb.io.inputs(0)
+  tsAxi.toReadOnly() <> axiRdArb.io.inputs(1)
+  txnAxi.toWriteOnly() <> axiWrArb.io.inputs(0)
+  tsAxi.toWriteOnly() <> axiWrArb.io.inputs(1)
+
   // NOTE: since packaged lkReq net lane may contain multi lkReq, size is 512/64(lk size)
   val lkReqQ = io.lkReq.queue(8)
 
-  // stream FIFO to tmp store the wrRlse req (later issue after get axi.b)
-  val lkReqRlseWrFifo = StreamFifo(LkReq(conf, false), 8)
+  // ports to ltReq, happens in different pipeline, ltReqImme covers ltReqGet & ltReqWrRlseAbt
+  val ltReqImme, ltReqRdRlse, ltReqWrRlseCmt = cloneOf(lkReqQ)
+  // arb the ports to io.ltReq
+  io.ltReq << StreamArbiterFactory.roundRobin.onArgs(ltReqImme, ltReqRdRlse, ltReqWrRlseCmt)
 
-  // demux the lkReqQ (if wrRlse, to Fifo, else to ltReq)
-  val isWrReqRlse = lkReqQ.lkRelease && (lkReqQ.lkType===LkT.wr || lkReqQ.lkType===LkT.raw) && ~lkReqQ.txnAbt // NOTE: not abt
-  val lkReqQFork, lkReqBpss = cloneOf(lkReqQ)
+  // ports to lkResp
+  val lkRespAbt, lkRespCmt = cloneOf(io.lkResp)
+  io.lkResp << StreamArbiterFactory.roundRobin.onArgs(lkRespAbt, lkRespCmt)
 
-  val lkReqQDmx = StreamDemux(lkReqQ, isWrReqRlse.asUInt, 2)
-  lkReqQDmx(0) >> lkReqBpss
-  lkReqQDmx(1) >> lkReqQFork // fork to both lkReqRlseWrFifo and axi.aw
+  // demux lkReq
+  val isLkReqImme = ~lkReqQ.lkRelease || (lkReqQ.lkRelease && lkReqQ.isWr && lkReqQ.txnAbt)
+  val lkReqQDmx = StreamDemux(lkReqQ, isLkReqImme.asUInt, 2)
+  lkReqQDmx(0) >> // tsAxi.aw & txnAxi.aw
+  lkReqQDmx(1) >> ltReqImme
 
-  // arb the lkReq from lkReqBpss / lkReqRlseWrFifo
-  io.ltReq << StreamArbiterFactory.roundRobin.onArgs(lkReqBpss, lkReqRlseWrFifo.io.pop.continueWithToken(io.axi.b.fire, 8))
+  // FIFOs in the pipeline (all the FIFOs store the lkResp type)
+  // push the ltResp; pop and 1. tsAxi.ar if granted OR 2. lkResp if abort
+  val ltRespFifo = StreamFifo(LkResp(conf, isTIdTrunc = false), 16)
+
+  // push the half-granted lkResp; pop 1. LkResp (Grant/Abort) AND 2. txnAxi.ar
+  val tsAxiRdFifo = StreamFifo(LkResp(conf, isTIdTrunc = false), 16)
+
+  // push the granted Rd LkResp OR WrCmt LkReq (MUX); pop tsAxi.aw,w; WrData via txnAxi.aw,w if WrCmt
+  val tsAxiWrFifo = StreamFifo(LkResp(conf, isTIdTrunc = false), 16)
+
+  // push the granted Rd LkResp OR WrCmt LkReq poped out from tsAxiWrFifo; pop LtReq.rlse if is Rd LkResp
+  val tsAxiBFifo = StreamFifo(LkResp(conf, isTIdTrunc = false), 16)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   val (reqFork1, reqFork2) = StreamFork2(lkReqQFork) // asynchronous
   lkReqRlseWrFifo.io.push << reqFork1
