@@ -175,6 +175,7 @@ case class LkResp(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
   val txnAbt = Bool()
   val lkIdx = UInt(conf.wLkIdx bits)
   val wLen = UInt(conf.wTupLenPow bits)
+  val tsTxn = (conf.ccProt=="TSO") generate UInt(conf.wTimeStamp bits)
   // TODO: how to reuse the above W/O bundle hierarchy
 
   val respType = LockRespType()
@@ -194,6 +195,10 @@ case class LkResp(conf: SysConfig, isTIdTrunc: Boolean) extends Bundle {
     val txnEntry = TxnEntry(this.conf)
     txnEntry.assignAllByName(this)
     txnEntry
+  }
+
+  def isGrant = {
+    this.respType === LockRespType.grant
   }
 
 }

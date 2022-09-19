@@ -3,6 +3,7 @@ package hwsys.util
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axilite._
+import spinal.lib.bus.amba4.axi._
 
 /** Implicit helpers */
 object Helpers {
@@ -170,8 +171,27 @@ object StreamBarrier {
   
 }
 
+object StreamFork4 {
+  def apply[T <: Data](input: Stream[T], synchronous: Boolean = false): (Stream[T], Stream[T], Stream[T], Stream[T]) = {
+    val fork = new StreamFork(input.payloadType, 4, synchronous).setCompositeName(input, "fork", true)
+    fork.io.input << input
+    return (fork.io.outputs(0), fork.io.outputs(1), fork.io.outputs(2), fork.io.outputs(3))
+  }
+}
+
+object StreamFork5 {
+  def apply[T <: Data](input: Stream[T], synchronous: Boolean = false): (Stream[T], Stream[T], Stream[T], Stream[T], Stream[T]) = {
+    val fork = new StreamFork(input.payloadType, 5, synchronous).setCompositeName(input, "fork", true)
+    fork.io.input << input
+    return (fork.io.outputs(0), fork.io.outputs(1), fork.io.outputs(2), fork.io.outputs(3), fork.io.outputs(4))
+  }
+}
+
+object Axi4Arbiter {
+//  def apply(inConfig: Axi4Config, inCount: Int, outCount: Int, outAxi: Axi4)
 
 
+}
 
 
 
