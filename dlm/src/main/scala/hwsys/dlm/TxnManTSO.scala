@@ -222,9 +222,9 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
 
     // ctx switch (two individual sets for tsAxi.resp & lkRespLoc)
     // ctx switch: tsAxi (curTxnId: tsAxi.rid.truncated, cnt++ as axi with same id is in order)
-    
+
     // Timing: tsAxi.r.fire / curTxnIdTsAxi / txnOffsTsAxi => rCurTxnIdTsAxi / tsReqTsAxi => rrCurTxnIdTsAxi / rtsReqTsAxi
-    
+
     val curTxnIdTsAxi = tsAxi.r.id // no need to .trim(1) as tsAxi.r.id is only 5 bits
     val rCurTxnIdTsAxi = RegNextWhen(curTxnIdTsAxi, tsAxi.r.fire)
     val rrCurTxnIdTsAxi = RegNext(rCurTxnIdTsAxi)
@@ -246,9 +246,9 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
       (tsAxiRdTS < tsTxn(rCurTxnIdTsAxi) && tsAxiWrTS < tsTxn(rCurTxnIdTsAxi))) || tsReqTsAxi.lkType === LkT.insTab
 
     // ctx switch: lkRespLoc
-    
+
     // Timing: lkRespLoc.fire / curTxnIdLkRespLoc => rCurTxnIdLkRespLoc / rLkRespLoc
-    
+
     val curTxnIdLkRespLoc = io.lkRespLoc.txnId
     val rLkRespLoc = RegNextWhen(io.lkRespLoc.payload, io.lkRespLoc.fire)
     val txnOffsLkRespLoc = curTxnIdLkRespLoc << conf.wMaxTxnLen
@@ -482,7 +482,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
         curTxnId := curTxnId + 1
       }
     }
-    
+
     tsWrWrReq.txnId := curTxnId
     tsWrWrReq.ts := tsTxn(curTxnId)
     tsWrWrReq.addr := ((lkItem.tId << 6) + (lkItem.cId << conf.wChSize)).resized
@@ -584,7 +584,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
       when(rAbort(rCurTxnId))(io.cntTxnAbt := io.cntTxnAbt + 1) otherwise (io.cntTxnCmt := io.cntTxnCmt + 1)
     }
   }
-  
+
 
   /**
    * Component: ts write to memory
@@ -609,7 +609,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
     val barrierFireTsWr = StreamBarrier(tsAxi.aw, tsAxi.w, tsWr.valid)
     tsWr.ready := barrierFireTsWr
   }
-  
+
 
   /**
    * component7: loadTxnMem
@@ -652,9 +652,9 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
         goto(CS_TXN)
       }
     }
-    
+
     CS_TXN.whenIsActive {
-      // TODO Txn slot empty criterion: 
+      // TODO Txn slot empty criterion:
       when(rRlseDone(curTxnId)) {
         goto(RD_CMDAXI)
       } otherwise {
@@ -682,7 +682,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
       txnMem.write(txnOffs + cntTxnWord, txnSt, rTxnMemLd)
 
       when(cntTxnWordInLine.willOverflow)(rTxnMemLd.clear())
-      
+
       when(cntTxnWord.willOverflow) {
         // clear all cnt register
         for (e <- Seq(cntLkReqLoc, cntLkReqRmt, cntLkRespLocTab, cntLkRespLocMem, cntLkRespRmt,
@@ -707,12 +707,12 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
   // io.done: all txn rlseDone; all txn loaded; set done only once
   when(rRlseDone.andR && io.cntTxnLd === io.txnNumTotal && ~io.done)(io.done.set())
 
-  
-  
+
+
   /**
    * Component: clk counter
    * */
-  
+
   // io.cntClk & clear status reg
   val clkCnt = new StateMachine {
     val IDLE = new State with EntryPoint

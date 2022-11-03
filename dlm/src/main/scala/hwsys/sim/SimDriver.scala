@@ -233,14 +233,15 @@ object SimDriver {
    */
   def rdmaSwitch(cd: ClockDomain, n: Int, lat: Int, sq: Seq[Stream[StreamData]],
                                rdReq: Seq[Stream[StreamData]], wrReq: Seq[Stream[StreamData]],
-                               axiSrc: Seq[Stream[Axi4StreamData]], axiSink: Seq[Stream[Axi4StreamData]]) = {
+                               axiSrc: Seq[Stream[Axi4StreamData]], axiSink: Seq[Stream[Axi4StreamData]],
+                 ack: Seq[Stream[StreamData]]) = {
 
 
     //
     def getRmt(idx: Int) = (idx+1)%2
 
     var cycle = 0
-    val rdReqQ, wrReqQ, axiSrcCmdQ, axiSinkCmdQ, axiSrcQ, axiSinkQ, tsQ1, tsQ2 = List.fill(rdReq.length)(mutable.Queue[BigInt]())
+    val rdReqQ, wrReqQ, axiSrcCmdQ, axiSinkCmdQ, axiSrcQ, axiSinkQ, ackQ, tsQ1, tsQ2, tsQ3 = List.fill(rdReq.length)(mutable.Queue[BigInt]())
     // val lkRdReq, lkWrReq, lkAxiSrc, lkAxiSink = List.fill(rdReq.length)(Lock)
 
     // clk counter
@@ -278,6 +279,10 @@ object SimDriver {
           for (enQ <- Seq(rdReqQ(idx), wrReqQ(getRmt(idx)), axiSrcCmdQ(idx), axiSinkCmdQ(getRmt(idx)))) {
             enQ.enqueue(reqVal)
           }
+
+          // FIXME: assume all sq with opcode WRITE
+          val ackVal = bigIntTruncVal(sqD, 529, 538)
+          ackQ(idx).enqueue(ackVal)
 
           // println(s"[sqCmd] enq ${reqVal.hexString()}")
 
@@ -358,9 +363,25 @@ object SimDriver {
               // println(s"[axiSinkQ] deq ${axiSinkVal.hexString()}")
             } while (!fragEnd)
             q.dequeue() // cmdQ
+            tsQ3(getRmt(idx)).enqueue(cycle)
             tsQ2(idx).dequeue()
           } else {
             axiSink(idx).simIdle()
+            cd.waitSampling()
+          }
+        }
+      }
+    }
+
+    ackQ.zipWithIndex.foreach { case (q, idx) =>
+      fork {
+        while(true){
+          if(q.nonEmpty && tsQ3(idx).nonEmpty && (cycle > tsQ3(idx).front + lat)){
+            val ackVal = q.dequeue()
+            ack(idx).sendData(cd, ackVal)
+            tsQ3(idx).dequeue()
+          } else {
+            ack(idx).simIdle()
             cd.waitSampling()
           }
         }

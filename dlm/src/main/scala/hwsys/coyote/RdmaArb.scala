@@ -1,20 +1,39 @@
 package hwsys.coyote
 
+import hwsys.util.CntIncDec
 import spinal.core._
 import spinal.lib._
 
-// TODO: abstract to ArbwihMultiStreams
+/**
+ * Arbitrate the rdma interface for multi queue pair
+ * TODO: abstract to ArbwihMultiStreams
+ * TODO: now support WR operation only
+ * TODO: the cntOnFly selection signal is controlled by the sq/ack qpn, assuming qpn is 0,1,2...
+ * outstanding request control for each qp
+ */
+
 class RdmaArb(cnt: Int) extends Component {
 
   val io = new Bundle {
-    // input
     val rdmaV = Vec(new RdmaIO, cnt)
-    // output
     val rdmaio = new RdmaIO
   }
 
   // rdmaV is a slave hub
   io.rdmaV.foreach(_.flipDir())
+  io.rdmaV.foreach(_.ack.setIdle())
+  // rdma_ack always ready
+  io.rdmaio.ack.ready.set()
+
+  // FIXME: outstanding req is fixed to 2^5
+  val cntOnFlyArray = Array.fill(cnt)(CntIncDec(2 bits, False, False))
+  cntOnFlyArray.foreach(_.incFlag.allowOverride)
+  (cntOnFlyArray, io.rdmaV).zipped.foreach(_.incFlag := _.sq.fire)
+  cntOnFlyArray.zipWithIndex.foreach{ case(elem, idx) =>
+    // FIXME: cast to RdmaAckT
+    elem.decFlag.allowOverride
+    elem.decFlag := (io.rdmaio.ack.fire && io.rdmaio.ack.data(9 downto 0).asUInt === idx)
+  }
 
   // pipe the sq
   val sqV = Vec(Stream(StreamData(544)), cnt)
@@ -30,15 +49,20 @@ class RdmaArb(cnt: Int) extends Component {
     mskSqVld(i) := sqV(i).valid
 
   // round-robin
-  val mskSqSel = cloneOf(mskSqVld)
-  // LSB should be initialized to 1
-  val mskLocked = RegNextWhen(mskSqSel, io.rdmaio.sq.fire).init(1)
-  mskSqSel := OHMasking.roundRobin(mskSqVld, mskLocked(0) ## mskLocked(mskLocked.high downto 1))
+  val mskSqSel, mskFlowCtrl = cloneOf(mskSqVld)
 
+  cntOnFlyArray.zipWithIndex.foreach{ case(elem, idx) =>
+    mskFlowCtrl(idx) := ~elem.willOverflowIfInc
+  }
+  // LSB should be initialized to 1
+  val mskLocked = RegNextWhen(mskSqSel & mskFlowCtrl, io.rdmaio.sq.fire).init(1)
+
+  // FIXME: mskLocked maybe all 0, in that case the msksqSel is invalid
+  mskSqSel := OHMasking.roundRobin(mskSqVld, mskLocked(0) ## mskLocked(mskLocked.high downto 1))
   val sqSel = OHToUInt(mskSqSel)
 
   // fire when strmFifo is not full
-  io.rdmaio.sq << StreamMux(sqSel, sqV).continueWhen(strmFifo1.io.availability > 0)
+  io.rdmaio.sq << StreamMux(sqSel, sqV).continueWhen(strmFifo1.io.availability > 0 && mskSqSel.orR)
 
   strmFifo1.io.push.payload := sqSel
   strmFifo1.io.push.valid := io.rdmaio.sq.fire
@@ -59,6 +83,7 @@ class RdmaArb(cnt: Int) extends Component {
   val strmFifo3 = StreamFifo(UInt(log2Up(cnt) bits), 32)
   val wrReq = ReqT()
   wrReq.assignFromBits(io.rdmaio.wr_req.data)
+  // use the vaddr to demux the target
   val wrSel = wrReq.vaddr.resize(log2Up(cnt) bits)
 
   (io.rdmaV, StreamDemux(io.rdmaio.wr_req.continueWhen(strmFifo3.io.availability > 0), wrSel, cnt)).zipped.foreach(_.wr_req << _)

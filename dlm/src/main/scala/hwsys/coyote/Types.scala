@@ -59,20 +59,19 @@ case class RdmaReqT() extends Bundle {
   val opcode = UInt(5 bits)
 }
 
-
-//case class RdmaReqT() extends Bundle {
-//  val rsrvd = UInt(560-512-1-10-32 bits) // 5b
-//  val msg = UInt(512 bits) // RdmaBaseT or RPC
-//  val host = Bool()
-//  val qpn = UInt(10 bits)
-//  val opcode = UInt(32 bits) // Vitis HLS enum
-//}
+case class RdmaAckT() extends Bundle {
+  // current coyote rdma_ack_t [is_nack: pid 6b: vfid 4b]
+  // roce ip core provides 16b qpn
+  val qpn  = UInt(10 bits)
+  val is_nak = Bool()
+}
 
 class RdmaIO extends Bundle {
   // rd/wr cmd
   val rd_req = slave Stream StreamData(96)
   val wr_req = slave Stream StreamData(96)
   val sq = master Stream StreamData(544)
+  val ack = slave Stream StreamData(11)
 
   val axis_sink = slave Stream Axi4StreamData(512)
   val axis_src =  master Stream Axi4StreamData(512)
@@ -81,6 +80,7 @@ class RdmaIO extends Bundle {
     rd_req.flipDir()
     wr_req.flipDir()
     sq.flipDir()
+    ack.flipDir()
     axis_sink.flipDir()
     axis_src.flipDir()
   }
@@ -89,6 +89,7 @@ class RdmaIO extends Bundle {
     rd_req.setBlocked()
     wr_req.setBlocked()
     sq.setIdle()
+    ack.setBlocked()
     axis_sink.setBlocked()
     axis_src.setIdle()
   }
@@ -261,7 +262,3 @@ class CMemHostIO(cmemAxiConf: Axi4Config) extends Bundle {
     assignOffs
   }
 }
-
-
-
-

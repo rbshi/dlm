@@ -7,6 +7,7 @@ case class CntIncDec(bitCnt: BitCount, incFlag: Bool, decFlag: Bool) {
 
   val cnt = Reg(UInt(bitCnt)).init(0)
   val willOverflow = (cnt === (1<<bitCnt.value) -1) && incFlag
+  val willOverflowIfInc = (cnt === (1<<bitCnt.value) -1)
   val willUnderflow = (cnt === 0) && decFlag
   val willClear = False.allowOverride
 
