@@ -64,7 +64,7 @@ object WrapNodeNetSim {
 
       // connect rdma sim switch
       SimDriver.rdmaSwitch(dut.clockDomain, 2, 1000, dut.io.map(_.rdma.sq), dut.io.map(_.rdma.rd_req),
-        dut.io.map(_.rdma.wr_req), dut.io.map(_.rdma.axis_src), dut.io.map(_.rdma.axis_sink))
+        dut.io.map(_.rdma.wr_req), dut.io.map(_.rdma.axis_src), dut.io.map(_.rdma.axis_sink), dut.io.map(_.rdma.ack))
 
       // node & rdma ctrl
       dut.io.zipWithIndex.foreach { case (e, idx) =>

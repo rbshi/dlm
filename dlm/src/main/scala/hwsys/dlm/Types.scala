@@ -31,8 +31,8 @@ trait SysConfig {
 
   // CC mode: "NW (no wait)", "BW (bounded wait)", "TSO (timestamp ordering)"
   // def ccProt = "NW"
-  // def ccProt = "BW"
-  def ccProt = "TSO"
+   def ccProt = "BW"
+//  def ccProt = "TSO"
 
   // txnMan params
   val nTxnCS = 64 // concurrent txn count, limited by axi arid (6 bits)
@@ -107,7 +107,7 @@ case class TxnEntry(conf: SysConfig) extends Bundle {
     lkReq.lkIdx := lkIdx
     lkReq.txnAbt := False
     lkReq.txnTimeOut := False
-    lkReq.tsTxn := 0 // FIXME: affect NW/BW cases?
+    // lkReq.tsTxn := 0 // FIXME: affect NW/BW cases?
     lkReq
   }
 

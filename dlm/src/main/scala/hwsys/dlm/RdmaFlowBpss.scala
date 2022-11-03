@@ -53,12 +53,10 @@ class RdmaFlowBpss(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compon
   rdma_base.params := 0
 
   val sq = RdmaReqT()
-  // sq.opcode := 1 // APP_WRITE -> move to RC_RDMA_WRITE_ONLY after `rdma_req_parser`
-  sq.opcode := 0xa // RDMA_WRITE_ONLY
+  sq.opcode := 0xa // 0x0a: RDMA_WRITE_ONLY  0x01: APP_WRITE -> move to RC_RDMA_WRITE_ONLY after `rdma_req_parser`
   sq.qpn := io.ctrl.qpn
   sq.host := False
-  // sq.mode := False // with RDMA parser
-  sq.mode := True // RDMA_MODE_RAW, bypass the RDMA parser
+  sq.mode := True // True: RDMA_MODE_RAW, bypass the RDMA parser False: with RDMA parser
   sq.last := True
   sq.msg.assignFromBits(rdma_base.asBits)
   sq.rsrvd := 0
