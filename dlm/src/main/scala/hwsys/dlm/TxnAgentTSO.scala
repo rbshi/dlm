@@ -53,11 +53,18 @@ class TxnAgentTSO (conf: SysConfig) extends Component {
   // demux lkReq
   val isLkReqImme = ~lkReqQ.lkRelease || (lkReqQ.lkRelease && lkReqQ.isWr && lkReqQ.txnAbt)
   val lkWrCmtRlse = cloneOf(lkReqQ)
-  Vec(lkWrCmtRlse, ltReqImme) = StreamDemux(lkReqQ, isLkReqImme.asUInt, 2)
+  // Vec(lkWrCmtRlse, ltReqImme) = StreamDemux(lkReqQ, isLkReqImme.asUInt, 2)
+  val lkReqQDmx = StreamDemux(lkReqQ, isLkReqImme.asUInt, 2)
+  lkReqQDmx(0) <> lkWrCmtRlse
+  lkReqQDmx(1) <> ltReqImme
 
   // demux lkResp
   val ltRespAbt, ltRespGrant = cloneOf(io.ltResp)
-  Vec(ltRespAbt, ltRespGrant) = StreamDemux(io.lkResp, io.lkResp.isGrant.asUInt, 2)
+  // Vec(ltRespAbt, ltRespGrant) = StreamDemux(io.lkResp, io.lkResp.isGrant.asUInt, 2)
+  val lkRespDmx = StreamDemux(io.lkResp, io.lkResp.isGrant.asUInt, 2)
+  lkRespDmx(0) <> ltRespAbt
+  lkRespDmx(1) <> ltRespGrant
+
   // if ltResp is abt, directly to io.lkResp
   ltRespAbt >> lkRespPass1
 
@@ -71,7 +78,7 @@ class TxnAgentTSO (conf: SysConfig) extends Component {
   // Event: io.ltResp (only lkReqGet exists, no resp for lkRlse) >> ltRespFifo
   val (ltRespGrantFork1, ltRespGrantFork2) = StreamFork2(ltRespGrant)
   ltRespGrantFork1 >> lkRespFifoS1.io.push
-  val tsAxi.ar.addr = ((ltRespGrantFork2.tId << 6) + (ltRespGrantFork2.cId << conf.wChSize)).resized
+  tsAxi.ar.addr := ((ltRespGrantFork2.tId << 6) + (ltRespGrantFork2.cId << conf.wChSize)).resized
   tsAxi.ar.id := 0
   tsAxi.ar.len := 0
   tsAxi.ar.size := log2Up(conf.wTimeStamp * 2 / 8) // read both Rd/Wr TS
@@ -118,10 +125,10 @@ class TxnAgentTSO (conf: SysConfig) extends Component {
   //
   val (f1, f2, f3, f4, f5) = StreamFork5(lkRespFifoS1.io.pop)
   lkRespPass2.payload := lkRespFifoS1.io.pop
-  lkRespPass2.respType.allowOverride := isAbt
+  lkRespPass2.respType.allowOverride := isAbt ? LockRespType.abort | LockRespType.grant
 
   // txnAxi.ar
-  val txnAxi.ar.addr = ((lkRespFifoS1.io.pop.tId << 6) + (lkRespFifoS1.io.pop.cId << conf.wChSize)).resized
+  txnAxi.ar.addr := ((lkRespFifoS1.io.pop.tId << 6) + (lkRespFifoS1.io.pop.cId << conf.wChSize)).resized
   txnAxi.ar.id := 0
   txnAxi.ar.len := (U(1) << lkRespFifoS1.io.pop.wLen) - 1
   txnAxi.ar.size := log2Up(512 / 8)

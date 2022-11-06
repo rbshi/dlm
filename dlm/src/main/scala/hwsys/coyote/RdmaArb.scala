@@ -26,14 +26,15 @@ class RdmaArb(cnt: Int) extends Component {
   io.rdmaio.ack.ready.set()
 
   // FIXME: outstanding req is fixed to 2^5
-  val cntOnFlyArray = Array.fill(cnt)(CntIncDec(2 bits, False, False))
-  cntOnFlyArray.foreach(_.incFlag.allowOverride)
-  (cntOnFlyArray, io.rdmaV).zipped.foreach(_.incFlag := _.sq.fire)
-  cntOnFlyArray.zipWithIndex.foreach{ case(elem, idx) =>
-    // FIXME: cast to RdmaAckT
-    elem.decFlag.allowOverride
-    elem.decFlag := (io.rdmaio.ack.fire && io.rdmaio.ack.data(9 downto 0).asUInt === idx)
-  }
+  val cntOnFly = CntIncDec(5 bits, io.rdmaio.sq.fire, io.rdmaio.ack.fire)
+  // FIXME: cntOnFlyArray for each qpn
+//  val cntOnFlyArray = Array.fill(cnt)(CntIncDec(2 bits, False, False))
+//  cntOnFlyArray.foreach(_.incFlag.allowOverride)
+//  (cntOnFlyArray, io.rdmaV).zipped.foreach(_.incFlag := _.sq.fire)
+//  cntOnFlyArray.zipWithIndex.foreach{ case(elem, idx) =>
+//    elem.decFlag.allowOverride
+//    elem.decFlag := (io.rdmaio.ack.fire && io.rdmaio.ack.data(9 downto 0).asUInt === idx)
+//  }
 
   // pipe the sq
   val sqV = Vec(Stream(StreamData(544)), cnt)
@@ -49,20 +50,20 @@ class RdmaArb(cnt: Int) extends Component {
     mskSqVld(i) := sqV(i).valid
 
   // round-robin
-  val mskSqSel, mskFlowCtrl = cloneOf(mskSqVld)
+  val mskSqSel = cloneOf(mskSqVld)
 
-  cntOnFlyArray.zipWithIndex.foreach{ case(elem, idx) =>
-    mskFlowCtrl(idx) := ~elem.willOverflowIfInc
-  }
+//  cntOnFlyArray.zipWithIndex.foreach{ case(elem, idx) =>
+//    mskFlowCtrl(idx) := ~elem.willOverflowIfInc
+//  }
   // LSB should be initialized to 1
-  val mskLocked = RegNextWhen(mskSqSel & mskFlowCtrl, io.rdmaio.sq.fire).init(1)
+  val mskLocked = RegNextWhen(mskSqSel, io.rdmaio.sq.fire).init(1)
 
   // FIXME: mskLocked maybe all 0, in that case the msksqSel is invalid
   mskSqSel := OHMasking.roundRobin(mskSqVld, mskLocked(0) ## mskLocked(mskLocked.high downto 1))
   val sqSel = OHToUInt(mskSqSel)
 
   // fire when strmFifo is not full
-  io.rdmaio.sq << StreamMux(sqSel, sqV).continueWhen(strmFifo1.io.availability > 0 && mskSqSel.orR)
+  io.rdmaio.sq << StreamMux(sqSel, sqV).continueWhen(strmFifo1.io.availability > 0 && ~cntOnFly.willOverflowIfInc)
 
   strmFifo1.io.push.payload := sqSel
   strmFifo1.io.push.valid := io.rdmaio.sq.fire
