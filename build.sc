@@ -2,7 +2,7 @@ import $ivy.`com.goyeau::mill-scalafix::0.2.8`
 import com.goyeau.mill.scalafix.ScalafixModule
 import mill._, scalalib._, scalafmt._
 
-val spinalVersion = "1.6.4"
+val spinalVersion = "1.7.3"
 val scalaTestVersion = "3.2.11"
 
 trait CommonSpinalModule extends ScalaModule with ScalafmtModule with ScalafixModule {

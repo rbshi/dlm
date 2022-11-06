@@ -290,7 +290,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
                 cntLkHoldWrLoc(rCurTxnIdTsAxi) := cntLkHoldWrLoc(rCurTxnIdTsAxi) + 1
                 goto(LOCAL_RD_REQ_UPTS)
               }
-              is(LkT.insTab)() // will not happen
+              // is(LkT.insTab)() // will not happen
             }
           }
         } otherwise (rAbort(rCurTxnIdTsAxi) := True)
@@ -318,7 +318,7 @@ class TxnManTSO(conf: SysConfig) extends Component with RenameIO {
                 cntLkHoldWrLoc(curTxnIdLkRespLoc) := cntLkHoldWrLoc(curTxnIdLkRespLoc) + 1
                 goto(LOCAL_RD_REQ_UPTS)
               }
-              is(LkT.insTab)()
+              // is(LkT.insTab)()
             }
           }
         } otherwise (rAbort(curTxnIdLkRespLoc) := True)
