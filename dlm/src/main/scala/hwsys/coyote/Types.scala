@@ -60,9 +60,9 @@ case class RdmaReqT() extends Bundle {
 }
 
 case class RdmaAckT() extends Bundle {
-  // current coyote rdma_ack_t [is_nack: pid 6b: vfid 4b]
-  // roce ip core provides 16b qpn
-  val qpn  = UInt(10 bits)
+  val msn = UInt(24 bits)
+  val syndrome = UInt(8 bits)
+  val qpn  = UInt(10 bits) // [vfid + pid in Coyote]
   val is_nak = Bool()
 }
 
@@ -71,7 +71,7 @@ class RdmaIO extends Bundle {
   val rd_req = slave Stream StreamData(96)
   val wr_req = slave Stream StreamData(96)
   val sq = master Stream StreamData(544)
-  val ack = slave Stream StreamData(11)
+  val ack = slave Stream StreamData(43)
 
   val axis_sink = slave Stream Axi4StreamData(512)
   val axis_src =  master Stream Axi4StreamData(512)
@@ -92,6 +92,15 @@ class RdmaIO extends Bundle {
     ack.setBlocked()
     axis_sink.setBlocked()
     axis_src.setIdle()
+  }
+
+  def tieOffFlip(): Unit = {
+    rd_req.setIdle()
+    wr_req.setIdle()
+    sq.setBlocked()
+    ack.setIdle()
+    axis_sink.setIdle()
+    axis_src.setBlocked()
   }
 
 }

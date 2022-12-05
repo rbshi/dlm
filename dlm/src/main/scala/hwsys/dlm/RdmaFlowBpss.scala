@@ -25,6 +25,7 @@ class RdmaFlowBpss(isMstr : Boolean)(implicit sysConf: SysConfig) extends Compon
   // default
   io.rdma.axis_src.tlast.clear()
   io.rdma.axis_src.tkeep.setAll()
+  io.rdma.ack.ready.set()
 
   // ready of rd/wr req
   io.rdma.rd_req.ready.set()

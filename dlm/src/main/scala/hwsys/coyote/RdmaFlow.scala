@@ -10,7 +10,7 @@ import hwsys.util.Helpers._
 case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
 
   val io = new Bundle {
-    val rdma_1 = new RdmaIO
+    val rdma = new RdmaIO
 
     // interface user logic
     val q_sink = slave Stream Bits(512 bits)
@@ -18,59 +18,62 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
 
     // input
     val en = in Bool()
-    val len = in UInt(32 bits)
+    val len = in UInt(16 bits)
     val qpn = in UInt(10 bits)
     val nOnFly = in UInt(32 bits)
-    val flowId = in UInt(4 bits)
+//    val flowId = in UInt(4 bits)
 
     // output
     val cntSent = out(Reg(UInt(32 bits))).init(0)
     val cntRecv = out(Reg(UInt(32 bits))).init(0)
 
+    val dbg = out Bits(64 bits);
+
   }
 
   val rdma_base = RdmaBaseT()
   rdma_base.lvaddr := 0
-  rdma_base.rvaddr := io.flowId.resized // for rdma wr to different resource, use flowId as rvadd to identify
-  rdma_base.len := io.len
+  rdma_base.rvaddr := 0 // for rdma wr to different resource, use flowId as rvadd to identify
+  rdma_base.len := io.len.resized
   rdma_base.params := 0
 
   val sq = RdmaReqT()
-  sq.opcode := 1 // APP_WRITE -> move to RC_RDMA_WRITE_ONLY after `rdma_req_parser`
   sq.opcode := 0xa // RDMA_WRITE_ONLY
   sq.qpn := io.qpn
   sq.host := False
   sq.mode := True // RDMA_MODE_RAW, bypass the RDMA parser
+  sq.last := True
   sq.msg.assignFromBits(rdma_base.asBits)
   sq.rsrvd := 0
-  io.rdma_1.sq.data.assignFromBits(sq.asBits)
+  io.rdma.sq.data.assignFromBits(sq.asBits)
 
   // default
-  io.rdma_1.sq.valid.clear()
-  io.rdma_1.axis_src.valid.clear()
-  io.rdma_1.axis_src.tlast.clear()
-  io.rdma_1.axis_src.tkeep.setAll()
+  io.rdma.axis_src.tkeep.setAll()
+
+  // throw away the ack
+  io.rdma.ack.ready.set()
 
   // ready of rd/wr req
-  io.rdma_1.rd_req.ready.set()
-  io.rdma_1.wr_req.ready.set()
+  io.rdma.rd_req.ready.set()
+  io.rdma.wr_req.ready.set()
 
-  // val incCntToSend = io.rdma_1.rd_req.fire // should NOT use rd_req to trigger the incCntToSend, it has a delay to the sq.fire, and will underflow to fireSq criteria to minus ??
-  val incCntToSend = io.rdma_1.sq.fire
-  val decCntToSend = io.rdma_1.axis_src.fire && io.rdma_1.axis_src.tlast
-  val cntAxiToSend = CntIncDec(8 bits, incCntToSend, decCntToSend)
+  // val incCntToSend = io.rdma.rd_req.fire // should NOT use rd_req to trigger the incCntToSend, it has a delay to the sq.fire, and will underflow to fireSq criteria to minus ??
+  val incPkgToSend = io.rdma.sq.fire
+  val decPkgToSend = io.rdma.axis_src.fire && io.rdma.axis_src.tlast
+  val cntPkgToSend = CntIncDec(8 bits, incPkgToSend, decPkgToSend)
 
-  val incOnFly = io.rdma_1.sq.fire
-  val decOnFly = io.rdma_1.axis_sink.fire && io.rdma_1.axis_sink.tlast
+  val incOnFly = io.rdma.sq.fire
+  val decOnFly = io.rdma.axis_sink.fire && io.rdma.axis_sink.tlast
   val cntOnFly = CntIncDec(8 bits, incOnFly, decOnFly)
 
   io.cntRecv := io.cntRecv + decOnFly.asUInt(1 bit)
-  io.cntSent := io.cntSent + decCntToSend.asUInt(1 bit)
+  io.cntSent := io.cntSent + decPkgToSend.asUInt(1 bit)
 
-  val cntBeat = CntDynmicBound(io.len>>6, io.rdma_1.axis_src.fire) // each axi beat is with 64 B
-  when(cntBeat.willOverflowIfInc) (io.rdma_1.axis_src.tlast.set())
+  val cntBeat = CntDynmicBound(io.len>>6, io.rdma.axis_src.fire) // each axi beat is with 64 B
+  io.rdma.axis_src.tlast := cntBeat.willOverflowIfInc
 
-
+  io.dbg := 0
+  io.dbg.allowOverride
 
   if(isMstr){
     // mstr hw & behavior
@@ -83,16 +86,22 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
     // sendQ
     io.q_sink >> sendQ.io.push
     // have packet to send
-    io.rdma_1.axis_src.translateFrom(sendQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _)
+    io.rdma.axis_src.translateFrom(sendQ.io.pop.continueWhen(cntPkgToSend.cnt > 0))(_.tdata := _)
 
     // fire sq
-    // the max net package size here is 1KB (one max send len = 1KB -> 64<<4)
-    val fireSq = ((sendQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16) && (recvQ.io.availability >= ((cntOnFly.cnt+1)<<4)) && (cntOnFly.cnt < io.nOnFly)
-    when(fireSq)(io.rdma_1.sq.valid := True)
+    // the max net package size here is 4KB (one max send len = 4KB -> 64 << 6)
+    val fireSq = ((sendQ.io.occupancy - (cntPkgToSend.cnt * (io.len>>6))).asSInt >= (io.len>>6).asSInt ) && (recvQ.io.availability >= ((cntOnFly.cnt+1)<<4)) && (cntOnFly.cnt < io.nOnFly)
+    io.rdma.sq.valid := fireSq
 
     // recvQ
     recvQ.io.pop >> io.q_src
-    recvQ.io.push.translateFrom(io.rdma_1.axis_sink)(_ := _.tdata)
+    recvQ.io.push.translateFrom(io.rdma.axis_sink)(_ := _.tdata)
+
+    io.dbg(0) := ((sendQ.io.occupancy - (cntPkgToSend.cnt * (io.len>>6))).asSInt >= (io.len>>6).asSInt )
+    io.dbg(1) := (recvQ.io.availability >= ((cntOnFly.cnt+1)<<4))
+    io.dbg(2) := (cntOnFly.cnt < io.nOnFly)
+    io.dbg(12 downto 3) := sendQ.io.occupancy.asBits
+    io.dbg(20 downto 13) := cntPkgToSend.cnt.asBits
 
   } else {
     // slave hw & behavior (no onfly control)
@@ -103,21 +112,21 @@ case class RdmaFlow(isMstr : Boolean) extends Component with RenameIO {
 
     // reqQ
     reqQ.io.pop >> io.q_src
-    reqQ.io.push.translateFrom(io.rdma_1.axis_sink)(_ := _.tdata)
+    reqQ.io.push.translateFrom(io.rdma.axis_sink)(_ := _.tdata)
 
     // respQ
     io.q_sink >> respQ.io.push
     // have packet to send
-    io.rdma_1.axis_src.translateFrom(respQ.io.pop.continueWhen(cntAxiToSend.cnt > 0))(_.tdata := _)
+    io.rdma.axis_src.translateFrom(respQ.io.pop.continueWhen(cntPkgToSend.cnt > 0))(_.tdata := _)
 
     // fire sq
-    val fireSq = (respQ.io.occupancy - (cntAxiToSend.cnt<<4)).asSInt >= 16 // cast to SInt for comparison
-    when(fireSq)(io.rdma_1.sq.valid := True)
+    val fireSq = (respQ.io.occupancy - (cntPkgToSend.cnt * (io.len>>6))).asSInt >= (io.len>>6).asSInt // cast to SInt for comparison
+    io.rdma.sq.valid := fireSq
 
   }
 
   when(~io.en) {
-    cntAxiToSend.clearAll()
+    cntPkgToSend.clearAll()
     cntOnFly.clearAll()
     cntBeat.clearAll()
     io.cntSent.clearAll()

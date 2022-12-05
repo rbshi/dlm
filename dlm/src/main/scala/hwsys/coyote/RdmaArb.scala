@@ -21,12 +21,9 @@ class RdmaArb(cnt: Int) extends Component {
 
   // rdmaV is a slave hub
   io.rdmaV.foreach(_.flipDir())
-  io.rdmaV.foreach(_.ack.setIdle())
-  // rdma_ack always ready
-  io.rdmaio.ack.ready.set()
 
   // FIXME: outstanding req is fixed to 2^5
-  val cntOnFly = CntIncDec(5 bits, io.rdmaio.sq.fire, io.rdmaio.ack.fire)
+//  val cntOnFly = CntIncDec(5 bits, io.rdmaio.sq.fire, io.rdmaio.ack.fire)
   // FIXME: cntOnFlyArray for each qpn
 //  val cntOnFlyArray = Array.fill(cnt)(CntIncDec(2 bits, False, False))
 //  cntOnFlyArray.foreach(_.incFlag.allowOverride)
@@ -63,7 +60,8 @@ class RdmaArb(cnt: Int) extends Component {
   val sqSel = OHToUInt(mskSqSel)
 
   // fire when strmFifo is not full
-  io.rdmaio.sq << StreamMux(sqSel, sqV).continueWhen(strmFifo1.io.availability > 0 && ~cntOnFly.willOverflowIfInc)
+  // io.rdmaio.sq << StreamMux(sqSel, sqV).continueWhen(strmFifo1.io.availability > 0 && ~cntOnFly.willOverflowIfInc)
+  io.rdmaio.sq << StreamMux(sqSel, sqV).continueWhen(strmFifo1.io.availability > 0)
 
   strmFifo1.io.push.payload := sqSel
   strmFifo1.io.push.valid := io.rdmaio.sq.fire
@@ -96,5 +94,9 @@ class RdmaArb(cnt: Int) extends Component {
   // strmFifo3.io.pop.valid to address the latency between push and pop io
   (io.rdmaV, StreamDemux(io.rdmaio.axis_sink.continueWhen(strmFifo3.io.pop.valid) , axiSinkSel, cnt)).zipped.foreach(_.axis_sink << _)
   strmFifo3.io.pop.ready := (io.rdmaio.axis_sink.fire && io.rdmaio.axis_sink.tlast) // pop after an axis fragment
+
+  // fwd ack with qpn (ack.data(9 downto 0))
+  // qpn in local node should be consecutive number, like, 0-2 for mstr to remote node, 3-5 for slve
+  (io.rdmaV, StreamDemux(io.rdmaio.ack, io.rdmaio.ack.data(10 downto 1).asUInt.resized, cnt)).zipped.foreach(_.ack << _)
 
 }
